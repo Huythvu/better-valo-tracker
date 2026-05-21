@@ -1,4 +1,4 @@
-// Better Valo Tracker â€” Cloudflare Worker
+// Better Valo Tracker - Cloudflare Worker
 //
 // Public endpoint:
 //   GET /account/:name/:tag?region=eu
@@ -286,7 +286,7 @@ function json(data: unknown, status = 200): Response {
 }
 
 // Lightweight per-IP rate limit. In-memory and per-isolate, so it only catches
-// obvious hammering â€” edge caching is the real load protection. For hard abuse
+// obvious hammering - edge caching is the real load protection. For hard abuse
 // limits, add a Cloudflare dashboard rate-limiting rule.
 const rateBuckets = new Map<string, { count: number; reset: number }>();
 
