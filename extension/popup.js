@@ -1,31 +1,94 @@
 "use strict";
 
-const accountsEl = document.getElementById("accounts");
-const emptyEl = document.getElementById("empty");
-const statusEl = document.getElementById("status");
-const updatedEl = document.getElementById("updated");
-const refreshBtn = document.getElementById("refresh");
-const addForm = document.getElementById("add-form");
-const riotIdInput = document.getElementById("riot-id");
-const regionSelect = document.getElementById("region");
-const closeBtn = document.getElementById("close");
-const panelSideSelect = document.getElementById("panel-side");
-const tabButtons = document.querySelectorAll(".tab");
-
 const STALE_MS = 3 * 60 * 1000;
 
+const PANEL_HTML = `
+<div class="bvt-panel">
+  <header>
+    <h1>Better Valo Tracker</h1>
+    <div class="header-actions">
+      <button id="refresh" type="button" title="Refresh all">&#8635;</button>
+      <button id="close" type="button" title="Close panel">&times;</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" type="button" data-view="accounts">Accounts</button>
+    <button class="tab" type="button" data-view="settings">Settings</button>
+  </nav>
+
+  <section id="view-accounts" class="view">
+    <form id="add-form" autocomplete="off">
+      <input id="riot-id" type="text" placeholder="name#tag" aria-label="Riot ID" spellcheck="false" />
+      <select id="region" aria-label="Region">
+        <option value="eu">EU</option>
+        <option value="na">NA</option>
+        <option value="ap">AP</option>
+        <option value="kr">KR</option>
+        <option value="latam">LATAM</option>
+        <option value="br">BR</option>
+      </select>
+      <button type="submit">Add</button>
+    </form>
+    <p id="status" class="status" hidden></p>
+    <div id="accounts"></div>
+    <p id="empty" class="empty">No accounts tracked yet. Add a Riot ID above.</p>
+    <p id="updated" class="updated"></p>
+  </section>
+
+  <section id="view-settings" class="view" hidden>
+    <div class="setting">
+      <label for="panel-side">Panel side</label>
+      <select id="panel-side">
+        <option value="right">Right</option>
+        <option value="left">Left</option>
+      </select>
+    </div>
+    <p class="setting-hint">More preferences coming soon.</p>
+  </section>
+</div>`;
+
+let panelRoot = null;
 let rankAssets = {};
 
-init();
+let accountsEl;
+let emptyEl;
+let statusEl;
+let updatedEl;
+let refreshBtn;
+let addForm;
+let riotIdInput;
+let regionSelect;
+let closeBtn;
+let panelSideSelect;
+let tabButtons;
+
+// Called by content.js once the shadow root is created.
+self.bvtMountPanel = function bvtMountPanel(root) {
+  panelRoot = root;
+  root.innerHTML = PANEL_HTML;
+
+  accountsEl = root.getElementById("accounts");
+  emptyEl = root.getElementById("empty");
+  statusEl = root.getElementById("status");
+  updatedEl = root.getElementById("updated");
+  refreshBtn = root.getElementById("refresh");
+  addForm = root.getElementById("add-form");
+  riotIdInput = root.getElementById("riot-id");
+  regionSelect = root.getElementById("region");
+  closeBtn = root.getElementById("close");
+  panelSideSelect = root.getElementById("panel-side");
+  tabButtons = root.querySelectorAll(".tab");
+
+  init();
+};
 
 async function init() {
   await render();
   addForm.addEventListener("submit", onAdd);
   refreshBtn.addEventListener("click", refreshAll);
   accountsEl.addEventListener("click", onAccountsClick);
-  closeBtn.addEventListener("click", () => {
-    window.parent.postMessage({ type: "bvt-close" }, "*");
-  });
+  closeBtn.addEventListener("click", () => self.bvtClosePanel());
   tabButtons.forEach((tab) => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
@@ -38,8 +101,8 @@ async function init() {
   });
   refreshStale();
 
-  // The side panel stays open, so re-render when a background refresh or
-  // another panel instance updates stored data.
+  // The panel stays mounted, so re-render when a background refresh or
+  // another tab's panel updates stored data.
   chrome.storage.onChanged.addListener((changes, area) => {
     if ((area === "local" && changes.cache) || (area === "sync" && changes.accounts)) {
       render();
@@ -53,8 +116,8 @@ function switchView(name) {
   tabButtons.forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === name);
   });
-  document.getElementById("view-accounts").hidden = name !== "accounts";
-  document.getElementById("view-settings").hidden = name !== "settings";
+  panelRoot.getElementById("view-accounts").hidden = name !== "accounts";
+  panelRoot.getElementById("view-settings").hidden = name !== "settings";
 }
 
 async function loadSettings() {
@@ -142,7 +205,7 @@ function cardHtml(account, entry, position) {
   const color = rankColor(c.tierId, rankAssets);
   const icon = rankIcon(c.tierId, rankAssets);
   const iconEl = icon
-    ? `<img class="rank-icon" src="${esc(icon)}" alt="" />`
+    ? `<div class="rank-icon" style="background-image:url('${esc(icon)}')"></div>`
     : `<div class="rank-icon placeholder" style="background:${color}"></div>`;
 
   const profile = d.profile || {};
@@ -192,13 +255,13 @@ function cardHtml(account, entry, position) {
   return shell(pos, color, avatar, body);
 }
 
-function emptyAvatar() {
-  return `<div class="avatar"></div>`;
-}
-
 function shell(posBadge, accent, avatar, inner) {
   return `<div class="card" style="border-left-color:${accent}">` +
     `${posBadge}${avatar}<div class="card-main">${inner}</div></div>`;
+}
+
+function emptyAvatar() {
+  return `<div class="avatar"></div>`;
 }
 
 function sessionSummary(recent) {

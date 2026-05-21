@@ -3,6 +3,9 @@
 // Valorant rank-tier helpers. Tier ids match HenrikDev's `tier.id` (0-27):
 // 0 Unrated, 3-5 Iron, 6-8 Bronze, 9-11 Silver, 12-14 Gold, 15-17 Platinum,
 // 18-20 Diamond, 21-23 Ascendant, 24-26 Immortal, 27 Radiant.
+//
+// Exposed on `self` because content-script files do not share top-level
+// lexical scope.
 
 const RANK_ASSETS_KEY = "rankAssets";
 const RANK_ASSETS_TTL = 7 * 24 * 60 * 60 * 1000;
@@ -23,7 +26,7 @@ function rankColorFallback(tierId) {
 // Pulls competitive-tier icons + colors from valorant-api.com (free, no key),
 // cached in storage.local for a week. Returns {} if unavailable so callers can
 // fall back to plain colors.
-async function loadRankAssets() {
+self.loadRankAssets = async function loadRankAssets() {
   const stored = (await chrome.storage.local.get(RANK_ASSETS_KEY))[RANK_ASSETS_KEY];
   if (stored && Date.now() - stored.fetchedAt < RANK_ASSETS_TTL) {
     return stored.tiers;
@@ -47,15 +50,15 @@ async function loadRankAssets() {
   } catch {
     return (stored && stored.tiers) || {};
   }
-}
+};
 
-function rankColor(tierId, assets) {
+self.rankColor = function rankColor(tierId, assets) {
   const tier = assets && assets[tierId];
   if (tier && tier.color && tierId > 0) return tier.color;
   return rankColorFallback(tierId);
-}
+};
 
-function rankIcon(tierId, assets) {
+self.rankIcon = function rankIcon(tierId, assets) {
   const tier = assets && assets[tierId];
   return tier && tier.icon ? tier.icon : null;
-}
+};

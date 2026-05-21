@@ -12,13 +12,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": ["config.js", "api.js", "ranks.js", "popup.js", "content.js"],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["popup.html"],
+      "resources": ["popup.css"],
       "matches": ["<all_urls>"]
     }
   ],

@@ -1,4 +1,4 @@
-:root {
+:host {
   --bg: #0f1923;
   --panel: #1a242f;
   --panel-2: #21303c;
@@ -16,13 +16,15 @@
   padding: 0;
 }
 
-body {
+.bvt-panel {
   width: 100%;
-  min-width: 300px;
+  height: 100%;
+  overflow-y: auto;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", Tahoma, sans-serif;
   font-size: 13px;
+  line-height: 1.4;
   padding: 12px;
 }
 
@@ -312,7 +314,9 @@ h1::before {
   width: 40px;
   height: 40px;
   flex: 0 0 40px;
-  object-fit: contain;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .rank-icon.placeholder {
