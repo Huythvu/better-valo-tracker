@@ -6,13 +6,16 @@ const REFRESH_ALARM = "bvt-refresh";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(REFRESH_ALARM, { periodInMinutes: 5 });
-  chrome.sidePanel
-    .setPanelBehavior({ openPanelOnActionClick: true })
-    .catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === REFRESH_ALARM) refreshAll();
+});
+
+// The toolbar icon toggles the injected overlay in the active tab.
+chrome.action.onClicked.addListener((tab) => {
+  if (tab.id === undefined) return;
+  chrome.tabs.sendMessage(tab.id, { type: "bvt-toggle" }).catch(() => {});
 });
 
 async function refreshAll() {

@@ -8,6 +8,9 @@ const refreshBtn = document.getElementById("refresh");
 const addForm = document.getElementById("add-form");
 const riotIdInput = document.getElementById("riot-id");
 const regionSelect = document.getElementById("region");
+const closeBtn = document.getElementById("close");
+const panelSideSelect = document.getElementById("panel-side");
+const tabButtons = document.querySelectorAll(".tab");
 
 const STALE_MS = 3 * 60 * 1000;
 
@@ -20,6 +23,14 @@ async function init() {
   addForm.addEventListener("submit", onAdd);
   refreshBtn.addEventListener("click", refreshAll);
   accountsEl.addEventListener("click", onAccountsClick);
+  closeBtn.addEventListener("click", () => {
+    window.parent.postMessage({ type: "bvt-close" }, "*");
+  });
+  tabButtons.forEach((tab) => {
+    tab.addEventListener("click", () => switchView(tab.dataset.view));
+  });
+  panelSideSelect.addEventListener("change", saveSettings);
+  loadSettings();
 
   loadRankAssets().then((assets) => {
     rankAssets = assets;
@@ -33,6 +44,28 @@ async function init() {
     if ((area === "local" && changes.cache) || (area === "sync" && changes.accounts)) {
       render();
     }
+  });
+}
+
+// --- Tabs + settings --------------------------------------------------------
+
+function switchView(name) {
+  tabButtons.forEach((tab) => {
+    tab.classList.toggle("active", tab.dataset.view === name);
+  });
+  document.getElementById("view-accounts").hidden = name !== "accounts";
+  document.getElementById("view-settings").hidden = name !== "settings";
+}
+
+async function loadSettings() {
+  const { settings } = await chrome.storage.sync.get("settings");
+  panelSideSelect.value = (settings && settings.panelSide) || "right";
+}
+
+async function saveSettings() {
+  const { settings } = await chrome.storage.sync.get("settings");
+  await chrome.storage.sync.set({
+    settings: { ...(settings || {}), panelSide: panelSideSelect.value },
   });
 }
 
