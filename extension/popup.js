@@ -362,7 +362,7 @@ function cardHtml(account, entry, position, settings) {
 
   const d = entry.data || {};
   const c = d.current || {};
-  const recent = Array.isArray(d.recent) ? d.recent : [];
+  const recent = recentMatchesOf(d);
   const color = rankColor(c.tierId, rankAssets);
   const icon = rankIcon(c.tierId, rankAssets);
   const iconEl = icon
@@ -408,11 +408,11 @@ function cardHtml(account, entry, position, settings) {
 
   const pips =
     recent
-      .map(
-        (m) =>
-          `<span class="pip ${esc(m.result || "draw")}" title="${esc(m.map || "Unknown map")} &middot; ${esc(m.tier || "")}">` +
-          `${signed(Number(m.rrChange || 0))}</span>`,
-      )
+      .map((m) => {
+        const details = matchDetails(m, 0);
+        return `<span class="pip ${esc(details.resultClass)}" title="${esc(details.map)} &middot; ${esc(details.tier)}">` +
+          `${esc(details.rr)}</span>`;
+      })
       .join("") || `<span class="card-msg">No recent matches</span>`;
 
   const lastPlayedEl = settings.showLastPlayed
@@ -452,63 +452,140 @@ function emptyAvatar() {
   return `<div class="avatar"></div>`;
 }
 
+function recentMatchesOf(data) {
+  const candidates = [
+    data?.recent,
+    data?.recentMatches,
+    data?.matches,
+    data?.matchHistory,
+    data?.history,
+    data?.data?.recent,
+    data?.data?.matches,
+  ];
+  const list = candidates.find(Array.isArray) || [];
+  return list.filter(Boolean);
+}
+
 function latestCompetitiveMatch(recent) {
   return recent
-    .filter((m) => m && m.date && isCompetitiveMatch(m))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] || null;
+    .filter((m) => m && isCompetitiveMatch(m))
+    .sort((a, b) => matchDateMs(b) - matchDateMs(a))[0] || null;
 }
 
 function rrTooltipHtml(match, rrText, lastChange) {
-  const rrChange = match && Number.isFinite(Number(match.rrChange))
-    ? Number(match.rrChange)
-    : Number(lastChange || 0);
+  const details = matchDetails(match, lastChange);
 
-  const fallback = {
-    map: "No recent comp map found",
-    rrChange,
-    result: rrChange > 0 ? "win" : rrChange < 0 ? "loss" : "draw",
-  };
-  const m = match || fallback;
-  const result = resultLabel(m);
-  const score = scoreText(m);
-  const agent = valueOrDash(m.agent || m.character || m.agentName);
-  const map = valueOrDash(m.map || m.mapName);
-  const when = m.date ? timeAgo(m.date) : "—";
-  const tier = valueOrDash(m.tier || m.rank || m.currentTierPatched);
-
-  return `<span class="rr-hover" tabindex="0">${esc(rrText)}` +
-    `<span class="rr-tooltip" role="tooltip">` +
-    `<span class="tooltip-map">${esc(map)}</span>` +
-    `<span class="tooltip-row"><span>RR</span><strong class="${rrChange >= 0 ? "win" : "loss"}">${esc(signed(rrChange))}</strong></span>` +
-    `<span class="tooltip-row"><span>Result</span><strong class="${esc(result.className)}">${esc(result.text)}</strong></span>` +
-    `<span class="tooltip-row"><span>Score</span><strong>${esc(score)}</strong></span>` +
-    `<span class="tooltip-row"><span>Agent</span><strong>${esc(agent)}</strong></span>` +
-    `<span class="tooltip-row"><span>Rank then</span><strong>${esc(tier)}</strong></span>` +
-    `<span class="tooltip-row"><span>Played</span><strong>${esc(when)}</strong></span>` +
+  return `<span class="rr-hover" tabindex="0" aria-label="Latest competitive match details">${esc(rrText)}` +
+    `<span class="rr-popover" role="dialog" aria-label="Latest competitive match">` +
+    `<span class="popover-kicker">Latest comp</span>` +
+    `<span class="popover-title">${esc(details.map)}</span>` +
+    `<span class="popover-main">` +
+    `<span><strong class="${details.rrClass}">${esc(details.rr)}</strong><small>RR</small></span>` +
+    `<span><strong class="${esc(details.resultClass)}">${esc(details.result)}</strong><small>Result</small></span>` +
+    `<span><strong>${esc(details.score)}</strong><small>Score</small></span>` +
+    `</span>` +
+    `<span class="popover-row"><span>Agent</span><strong>${esc(details.agent)}</strong></span>` +
+    `<span class="popover-row"><span>Rank then</span><strong>${esc(details.tier)}</strong></span>` +
+    `<span class="popover-row"><span>Played</span><strong>${esc(details.when)}</strong></span>` +
     `</span></span>`;
 }
 
-function resultLabel(match) {
-  const raw = String(match.result || match.outcome || "").toLowerCase();
-  if (raw.includes("win") || raw === "won") return { text: "Win", className: "win" };
-  if (raw.includes("loss") || raw.includes("lose") || raw === "lost") return { text: "Loss", className: "loss" };
+function matchDetails(match, lastChange) {
+  const rrValue = numberFrom(
+    readField(match, [
+      "rrChange",
+      "rr_change",
+      "mmrChange",
+      "mmr_change",
+      "mmr_change_to_last_game",
+      "eloChange",
+      "elo_change",
+      "ratingChange",
+      "rating_change",
+      "change",
+    ]),
+  );
+  const rrChange = Number.isFinite(rrValue) ? rrValue : Number(lastChange || 0);
+  const result = resultLabel(match || {}, rrChange);
+  const date = matchDate(match);
+
+  return {
+    map: valueOrDash(readField(match, ["map", "mapName", "map.name", "metadata.map", "metadata.mapName", "meta.map", "match.map"])),
+    rr: signed(rrChange),
+    rrClass: rrChange >= 0 ? "win" : "loss",
+    result: result.text,
+    resultClass: result.className,
+    score: scoreText(match || {}),
+    agent: valueOrDash(readField(match, ["agent", "agentName", "character", "characterName", "player.agent", "player.character", "stats.agent"])),
+    tier: valueOrDash(readField(match, ["tier", "rank", "rankThen", "currentTierPatched", "tierPatched", "metadata.tier"])),
+    when: date ? timeAgo(date) : "—",
+  };
+}
+
+function resultLabel(match, rrChange = Number(match.rrChange || 0)) {
+  const raw = String(readField(match, ["result", "outcome", "matchResult", "status"]) || "").toLowerCase();
+  if (raw.includes("win") || raw === "won" || raw === "victory") return { text: "Win", className: "win" };
+  if (raw.includes("loss") || raw.includes("lose") || raw === "lost" || raw === "defeat") return { text: "Loss", className: "loss" };
   if (raw.includes("draw") || raw.includes("tie")) return { text: "Draw", className: "draw" };
 
-  const rr = Number(match.rrChange || 0);
-  if (rr > 0) return { text: "Win", className: "win" };
-  if (rr < 0) return { text: "Loss", className: "loss" };
+  const won = readField(match, ["won", "hasWon", "victory"]);
+  if (won === true) return { text: "Win", className: "win" };
+  if (won === false) return { text: "Loss", className: "loss" };
+
+  if (rrChange > 0) return { text: "Win", className: "win" };
+  if (rrChange < 0) return { text: "Loss", className: "loss" };
   return { text: "Unknown", className: "draw" };
 }
 
 function scoreText(match) {
-  const direct = match.score || match.rounds || match.matchScore;
-  if (direct) return direct;
+  const direct = readField(match, ["score", "rounds", "matchScore", "metadata.score"]);
+  if (direct) return String(direct);
 
-  const won = match.roundsWon ?? match.teamRoundsWon ?? match.round_won;
-  const lost = match.roundsLost ?? match.enemyRoundsWon ?? match.round_lost;
+  const won = readField(match, ["roundsWon", "teamRoundsWon", "round_won", "rounds.won", "teams.red.roundsWon", "team.roundsWon"]);
+  const lost = readField(match, ["roundsLost", "enemyRoundsWon", "round_lost", "rounds.lost", "teams.blue.roundsWon", "enemy.roundsWon"]);
   if (won !== undefined && lost !== undefined) return `${won}-${lost}`;
 
   return "—";
+}
+
+function matchDate(match) {
+  return readField(match, [
+    "date",
+    "playedAt",
+    "startedAt",
+    "startTime",
+    "gameStart",
+    "game_start",
+    "metadata.game_start",
+    "metadata.startedAt",
+    "meta.started_at",
+  ]);
+}
+
+function matchDateMs(match) {
+  const value = matchDate(match);
+  const ms = typeof value === "number" ? value : new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function readField(source, paths) {
+  if (!source) return undefined;
+  for (const path of paths) {
+    const parts = path.split(".");
+    let value = source;
+    for (const part of parts) {
+      if (value === undefined || value === null) break;
+      value = value[part];
+    }
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+}
+
+function numberFrom(value) {
+  if (value === undefined || value === null || value === "") return NaN;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : NaN;
 }
 
 function valueOrDash(value) {
@@ -517,31 +594,31 @@ function valueOrDash(value) {
 
 function sessionSummary(recent) {
   const today = new Date().toDateString();
-  const games = recent.filter((m) => m.date && new Date(m.date).toDateString() === today);
+  const games = recent.filter((m) => matchDate(m) && new Date(matchDate(m)).toDateString() === today);
   if (games.length === 0) return null;
   return {
-    rr: games.reduce((sum, m) => sum + Number(m.rrChange || 0), 0),
+    rr: games.reduce((sum, m) => sum + Number(matchDetails(m, 0).rr || 0), 0),
     count: games.length,
   };
 }
 
 function lastCompPlayedText(recent) {
   const matches = recent
-    .filter((m) => m && m.date && isCompetitiveMatch(m))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .filter((m) => m && matchDate(m) && isCompetitiveMatch(m))
+    .sort((a, b) => matchDateMs(b) - matchDateMs(a));
 
   if (matches.length === 0) return "Last comp played: No recent comp games found";
-  return `Last comp played: ${timeAgo(matches[0].date)}`;
+  return `Last comp played: ${timeAgo(matchDate(matches[0]))}`;
 }
 
 function isCompetitiveMatch(match) {
-  const possibleMode = `${match.mode || ""} ${match.queue || ""} ${match.queueId || ""}`.toLowerCase();
+  const possibleMode = `${readField(match, ["mode", "queue", "queueId", "metadata.mode", "metadata.queue"]) || ""}`.toLowerCase();
   if (possibleMode.includes("competitive") || possibleMode.includes("comp")) return true;
 
   // The current Worker data already appears to return ranked recent matches.
   // If mode/queue is missing, treat matches with RR changes or rank tier data
   // as competitive so the feature works without an extra match-history call.
-  return Number.isFinite(Number(match.rrChange)) || Boolean(match.tier);
+  return Number.isFinite(numberFrom(readField(match, ["rrChange", "rr_change", "mmrChange", "mmr_change", "mmr_change_to_last_game", "eloChange"]))) || Boolean(readField(match, ["tier", "rank", "currentTierPatched"]));
 }
 
 // --- Actions ----------------------------------------------------------------
