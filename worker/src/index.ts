@@ -2,9 +2,9 @@
 //
 // Public endpoint:
 //   GET /account/:name/:tag?region=eu
-// Fans out to two HenrikDev endpoints (MMR v3 + mmr-history v2), trims the
-// ~30 KB upstream payload down to the ~1 KB contract the extension consumes,
-// and caches the result at the edge.
+// Fans out to four HenrikDev endpoints (MMR v3, mmr-history v2, account v2,
+// matches v4), trims the bulky upstream payloads down to the compact contract
+// the extension consumes, and caches the result at the edge.
 
 const HENRIK_BASE = "https://api.henrikdev.xyz/valorant";
 const VALID_REGIONS = new Set(["eu", "na", "ap", "kr", "latam", "br"]);
@@ -24,7 +24,7 @@ interface HenrikTier {
 
 interface HenrikMmr {
   data?: {
-    account?: { name?: string; tag?: string };
+    account?: { name?: string; tag?: string; puuid?: string };
     current?: {
       tier?: HenrikTier;
       rr?: number;
@@ -46,6 +46,7 @@ interface HenrikHistoryEntry {
   map?: { name?: string };
   last_change?: number;
   date?: string;
+  match_id?: string;
 }
 
 interface HenrikHistory {
@@ -57,6 +58,39 @@ interface HenrikAccount {
     account_level?: number;
     card?: string;
   };
+}
+
+interface HenrikMatchPlayer {
+  puuid?: string;
+  name?: string;
+  tag?: string;
+  team_id?: string;
+  agent?: { name?: string };
+  stats?: {
+    score?: number;
+    kills?: number;
+    deaths?: number;
+    assists?: number;
+    headshots?: number;
+    bodyshots?: number;
+    legshots?: number;
+  };
+}
+
+interface HenrikMatchTeam {
+  team_id?: string;
+  won?: boolean;
+  rounds?: { won?: number; lost?: number };
+}
+
+interface HenrikMatch {
+  metadata?: { match_id?: string };
+  players?: HenrikMatchPlayer[];
+  teams?: HenrikMatchTeam[];
+}
+
+interface HenrikMatches {
+  data?: HenrikMatch[];
 }
 
 // --- The contract returned to the extension ---------------------------------
@@ -82,6 +116,14 @@ interface AccountPayload {
     map: string;
     tier: string;
     date: string;
+    agent: string | null;
+    kills: number | null;
+    deaths: number | null;
+    assists: number | null;
+    acs: number | null;
+    hsPct: number | null;
+    roundsWon: number | null;
+    roundsLost: number | null;
   }>;
   updatedAt: string;
 }
@@ -179,10 +221,11 @@ async function fetchAccount(
   const id = `${encodeURIComponent(name)}/${encodeURIComponent(tag)}`;
   const path = `${region}/pc/${id}`;
 
-  const [mmrRes, histRes, acctRes] = await Promise.all([
+  const [mmrRes, histRes, acctRes, matchRes] = await Promise.all([
     fetch(`${HENRIK_BASE}/v3/mmr/${path}`, { headers }),
     fetch(`${HENRIK_BASE}/v2/mmr-history/${path}`, { headers }),
     fetch(`${HENRIK_BASE}/v2/account/${id}`, { headers }),
+    fetch(`${HENRIK_BASE}/v4/matches/${path}?mode=competitive&size=5`, { headers }),
   ]);
 
   if (mmrRes.status === 404) {
@@ -213,7 +256,13 @@ async function fetchAccount(
     account = (await acctRes.json()) as HenrikAccount;
   }
 
-  return shape(name, tag, region, mmr, history, account);
+  let matches: HenrikMatch[] = [];
+  if (matchRes.ok) {
+    const parsed = (await matchRes.json()) as HenrikMatches;
+    matches = parsed.data ?? [];
+  }
+
+  return shape(name, tag, region, mmr, history, account, matches);
 }
 
 function shape(
@@ -223,23 +272,41 @@ function shape(
   mmr: HenrikMmr,
   history: HenrikHistoryEntry[],
   account: HenrikAccount,
+  matches: HenrikMatch[],
 ): AccountPayload {
   const data = mmr.data ?? {};
   const current = data.current ?? {};
   const seasonal = data.seasonal ?? [];
   const act = seasonal[seasonal.length - 1];
 
+  const matchStats = buildMatchStats(matches, data.account?.puuid, name, tag);
   const recent = history.slice(0, 5).map((h) => {
     const change = h.last_change ?? 0;
+    const stat = h.match_id ? matchStats[h.match_id] : undefined;
+    const result =
+      stat && stat.won !== null
+        ? stat.won
+          ? "win"
+          : "loss"
+        : change > 0
+          ? "win"
+          : change < 0
+            ? "loss"
+            : "draw";
     return {
-      result: (change > 0 ? "win" : change < 0 ? "loss" : "draw") as
-        | "win"
-        | "loss"
-        | "draw",
+      result: result as "win" | "loss" | "draw",
       rrChange: change,
       map: h.map?.name ?? "Unknown",
       tier: h.tier?.name ?? "Unrated",
       date: h.date ?? "",
+      agent: stat?.agent ?? null,
+      kills: stat?.kills ?? null,
+      deaths: stat?.deaths ?? null,
+      assists: stat?.assists ?? null,
+      acs: stat?.acs ?? null,
+      hsPct: stat?.hsPct ?? null,
+      roundsWon: stat?.roundsWon ?? null,
+      roundsLost: stat?.roundsLost ?? null,
     };
   });
 
@@ -278,6 +345,73 @@ function shape(
     recent,
     updatedAt: new Date().toISOString(),
   };
+}
+
+interface MatchStat {
+  agent: string | null;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  acs: number | null;
+  hsPct: number | null;
+  roundsWon: number | null;
+  roundsLost: number | null;
+  won: boolean | null;
+}
+
+// Indexes per-match stats by match id so mmr-history entries (which carry the
+// RR delta) can be enriched with score, agent, and combat stats. ACS and
+// headshot % are derived: ACS = combat score / rounds, HS% = head / all shots.
+function buildMatchStats(
+  matches: HenrikMatch[],
+  puuid: string | undefined,
+  name: string,
+  tag: string,
+): Record<string, MatchStat> {
+  const out: Record<string, MatchStat> = {};
+  const lowerName = name.toLowerCase();
+  const lowerTag = tag.toLowerCase();
+
+  for (const match of matches) {
+    const matchId = match.metadata?.match_id;
+    if (!matchId) continue;
+
+    const me = (match.players ?? []).find((p) =>
+      puuid && p.puuid
+        ? p.puuid === puuid
+        : p.name?.toLowerCase() === lowerName && p.tag?.toLowerCase() === lowerTag,
+    );
+    if (!me) continue;
+
+    const team = (match.teams ?? []).find((t) => t.team_id === me.team_id);
+    const roundsWon = team?.rounds?.won ?? null;
+    const roundsLost = team?.rounds?.lost ?? null;
+    const totalRounds = (roundsWon ?? 0) + (roundsLost ?? 0);
+
+    const s = me.stats ?? {};
+    const acs =
+      totalRounds > 0 && typeof s.score === "number"
+        ? Math.round(s.score / totalRounds)
+        : null;
+    const shots = (s.headshots ?? 0) + (s.bodyshots ?? 0) + (s.legshots ?? 0);
+    const hsPct =
+      shots > 0 && typeof s.headshots === "number"
+        ? Math.round((s.headshots / shots) * 100)
+        : null;
+
+    out[matchId] = {
+      agent: me.agent?.name ?? null,
+      kills: s.kills ?? null,
+      deaths: s.deaths ?? null,
+      assists: s.assists ?? null,
+      acs,
+      hsPct,
+      roundsWon,
+      roundsLost,
+      won: typeof team?.won === "boolean" ? team.won : null,
+    };
+  }
+  return out;
 }
 
 // --- Helpers ----------------------------------------------------------------
