@@ -17,8 +17,8 @@
 }
 
 body {
-  width: 360px;
-  max-height: 580px;
+  width: 380px;
+  max-height: 600px;
   overflow-y: auto;
   background: var(--bg);
   color: var(--text);
@@ -27,17 +27,30 @@ body {
   padding: 12px;
 }
 
+/* --- Header --- */
+
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 h1 {
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
+  font-weight: 800;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+h1::before {
+  content: "";
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  background: var(--red);
+  margin-right: 7px;
+  vertical-align: -2px;
 }
 
 #refresh {
@@ -64,6 +77,8 @@ h1 {
     transform: rotate(360deg);
   }
 }
+
+/* --- Add form --- */
 
 #add-form {
   display: flex;
@@ -99,14 +114,16 @@ h1 {
   color: #fff;
   border: none;
   border-radius: 6px;
-  padding: 7px 12px;
-  font-weight: 600;
+  padding: 7px 13px;
+  font-weight: 700;
   cursor: pointer;
 }
 
 #add-form button:hover {
   filter: brightness(1.1);
 }
+
+/* --- Status / empty --- */
 
 .status {
   background: rgba(255, 70, 85, 0.12);
@@ -120,27 +137,42 @@ h1 {
 .empty {
   color: var(--muted);
   text-align: center;
-  padding: 20px 8px;
+  padding: 26px 8px;
 }
+
+/* --- Card --- */
 
 .card {
   display: flex;
-  gap: 10px;
-  background: var(--panel);
+  gap: 9px;
+  background: linear-gradient(135deg, #1d2832, #18222c);
   border: 1px solid var(--line);
+  border-left: 4px solid var(--gray);
   border-radius: 8px;
-  padding: 10px;
+  padding: 9px 11px;
   margin-bottom: 8px;
 }
 
-.card-rank {
+.pos {
+  flex: 0 0 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 26px;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--gray);
+}
+
+.pos.gold {
+  color: #ffd454;
+}
+
+.pos.silver {
+  color: #cfd8de;
+}
+
+.pos.bronze {
+  color: #d08b52;
 }
 
 .card-main {
@@ -148,7 +180,7 @@ h1 {
   min-width: 0;
 }
 
-.card-head {
+.card-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -173,39 +205,81 @@ h1 {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0 0 0 6px;
 }
 
 .remove:hover {
   color: var(--red);
 }
 
-.rank-row {
+/* --- Rank line --- */
+
+.rank-line {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-top: 4px;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 0 2px;
 }
 
-.rank {
+.rank-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  object-fit: contain;
+}
+
+.rank-icon.placeholder {
+  border-radius: 50%;
+  transform: rotate(45deg) scale(0.62);
+}
+
+.rank-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.rank-name {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
-.rr {
-  color: var(--muted);
+.rr-bar {
+  height: 6px;
+  background: #0c141c;
+  border-radius: 3px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.rr-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+}
+
+.rr-side {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.rr-val {
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .delta {
+  font-size: 11px;
   font-weight: 700;
-  font-size: 12px;
+  margin-top: 1px;
 }
 
-.delta.win {
+.delta.win,
+strong.win {
   color: var(--green);
 }
 
-.delta.loss {
+.delta.loss,
+strong.loss {
   color: var(--red);
 }
 
@@ -218,23 +292,44 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 4px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
+  font-weight: 700;
   padding: 1px 5px;
   text-transform: uppercase;
+  vertical-align: 1px;
 }
+
+/* --- Meta / session --- */
 
 .meta {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   color: var(--muted);
-  margin-top: 5px;
+  margin-top: 7px;
   font-size: 12px;
 }
+
+.meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.session {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 5px;
+}
+
+.session strong {
+  font-weight: 800;
+}
+
+/* --- Recent pips --- */
 
 .recent {
   display: flex;
   gap: 4px;
-  margin-top: 7px;
+  margin-top: 8px;
 }
 
 .pip {
@@ -243,7 +338,7 @@ h1 {
   font-size: 11px;
   font-weight: 700;
   border-radius: 4px;
-  padding: 3px 0;
+  padding: 4px 0;
 }
 
 .pip.win {
@@ -263,7 +358,7 @@ h1 {
 
 .card-msg {
   color: var(--muted);
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 12px;
 }
 
@@ -275,5 +370,5 @@ h1 {
   color: var(--muted);
   text-align: center;
   font-size: 11px;
-  margin-top: 6px;
+  margin-top: 8px;
 }

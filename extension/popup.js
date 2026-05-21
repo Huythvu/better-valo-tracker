@@ -11,6 +11,8 @@ const regionSelect = document.getElementById("region");
 
 const STALE_MS = 3 * 60 * 1000;
 
+let rankAssets = {};
+
 init();
 
 async function init() {
@@ -18,6 +20,11 @@ async function init() {
   addForm.addEventListener("submit", onAdd);
   refreshBtn.addEventListener("click", refreshAll);
   accountsEl.addEventListener("click", onAccountsClick);
+
+  loadRankAssets().then((assets) => {
+    rankAssets = assets;
+    render();
+  });
   refreshStale();
 }
 
@@ -72,55 +79,82 @@ function eloOf(entry) {
 
 function cardHtml(account, entry, position) {
   const id = accountId(account);
-  const rankCol = `<div class="card-rank">${position ? "#" + position : ""}</div>`;
-  const head = `
-    <div class="card-head">
-      <span class="riot-id">${esc(account.name)}<span class="tag">#${esc(account.tag)}</span></span>
-      <button class="remove" data-id="${esc(id)}" title="Remove" type="button">&times;</button>
-    </div>`;
+  const posClass = position === 1 ? "gold" : position === 2 ? "silver" : position === 3 ? "bronze" : "";
+  const pos = `<div class="pos ${posClass}">${position || "&middot;"}</div>`;
+  const top =
+    `<div class="card-top">` +
+    `<span class="riot-id">${esc(account.name)}<span class="tag">#${esc(account.tag)}</span></span>` +
+    `<button class="remove" data-id="${esc(id)}" title="Remove" type="button">&times;</button>` +
+    `</div>`;
 
   if (!entry) {
-    return `<div class="card">${rankCol}<div class="card-main">${head}` +
-      `<div class="card-msg">Loading&hellip;</div></div></div>`;
+    return shell(pos, "#6b7a89", `${top}<div class="card-msg">Loading&hellip;</div>`);
   }
   if (entry.error) {
-    return `<div class="card">${rankCol}<div class="card-main">${head}` +
-      `<div class="card-msg error">${esc(entry.error)}</div></div></div>`;
+    return shell(pos, "#c0395a", `${top}<div class="card-msg error">${esc(entry.error)}</div>`);
   }
 
   const d = entry.data;
   const c = d.current;
+  const color = rankColor(c.tierId, rankAssets);
+  const icon = rankIcon(c.tierId, rankAssets);
+  const iconEl = icon
+    ? `<img class="rank-icon" src="${esc(icon)}" alt="" />`
+    : `<div class="rank-icon placeholder" style="background:${color}"></div>`;
+
   const deltaCls = c.lastChange > 0 ? "win" : c.lastChange < 0 ? "loss" : "draw";
+  const arrow = c.lastChange > 0 ? "&#9650;" : c.lastChange < 0 ? "&#9660;" : "";
+  const deltaText = c.lastChange === 0 ? "0" : `${arrow}${Math.abs(c.lastChange)}`;
+  const rrPct = Math.min(100, Math.max(0, c.rr));
   const placements = c.inPlacements ? `<span class="badge">Placements</span>` : "";
-  const actText = d.act.games > 0 ? `${d.act.wins}W ${d.act.losses}L` : "&mdash;";
 
-  const pips = d.recent
-    .map((m) => {
-      const label = `${signed(m.rrChange)} RR`;
-      return `<span class="pip ${m.result}" title="${esc(m.map)} &middot; ${esc(label)}">` +
-        `${signed(m.rrChange)}</span>`;
-    })
-    .join("");
-  const recent = pips || `<span class="card-msg">No recent matches</span>`;
+  const session = sessionSummary(d.recent);
+  const sessionEl = session
+    ? `<div class="session">Today &nbsp;` +
+      `<strong class="${session.rr >= 0 ? "win" : "loss"}">${signed(session.rr)} RR</strong>` +
+      ` &middot; ${session.count} game${session.count === 1 ? "" : "s"}</div>`
+    : "";
 
-  return `
-    <div class="card">
-      ${rankCol}
-      <div class="card-main">
-        ${head}
-        <div class="rank-row">
-          <span class="rank">${esc(c.tier)}</span>
-          <span class="rr">${c.rr} RR</span>
-          <span class="delta ${deltaCls}">${signed(c.lastChange)}</span>
-          ${placements}
-        </div>
-        <div class="meta">
-          <span>Peak: ${esc(d.peak.tier)}</span>
-          <span>Act: ${actText}</span>
-        </div>
-        <div class="recent">${recent}</div>
-      </div>
-    </div>`;
+  const pips =
+    d.recent
+      .map(
+        (m) =>
+          `<span class="pip ${m.result}" title="${esc(m.map)} &middot; ${esc(m.tier)}">` +
+          `${signed(m.rrChange)}</span>`,
+      )
+      .join("") || `<span class="card-msg">No recent matches</span>`;
+
+  const body =
+    top +
+    `<div class="rank-line">${iconEl}` +
+    `<div class="rank-info">` +
+    `<div class="rank-name">${esc(c.tier)} ${placements}</div>` +
+    `<div class="rr-bar"><span style="width:${rrPct}%;background:${color}"></span></div>` +
+    `</div>` +
+    `<div class="rr-side"><div class="rr-val">${c.rr} RR</div>` +
+    `<div class="delta ${deltaCls}">${deltaText}</div></div>` +
+    `</div>` +
+    `<div class="meta"><span>Peak <strong>${esc(d.peak.tier)}</strong></span>` +
+    `<span>Act ${d.act.games > 0 ? `${d.act.wins}W ${d.act.losses}L` : "&mdash;"}</span></div>` +
+    sessionEl +
+    `<div class="recent">${pips}</div>`;
+
+  return shell(pos, color, body);
+}
+
+function shell(posBadge, accent, inner) {
+  return `<div class="card" style="border-left-color:${accent}">` +
+    `${posBadge}<div class="card-main">${inner}</div></div>`;
+}
+
+function sessionSummary(recent) {
+  const today = new Date().toDateString();
+  const games = recent.filter((m) => m.date && new Date(m.date).toDateString() === today);
+  if (games.length === 0) return null;
+  return {
+    rr: games.reduce((sum, m) => sum + m.rrChange, 0),
+    count: games.length,
+  };
 }
 
 // --- Actions ----------------------------------------------------------------
