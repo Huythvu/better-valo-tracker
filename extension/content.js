@@ -75,6 +75,11 @@ async function buildPanel() {
 
 async function openPanel() {
   await buildPanel();
+
+  if (typeof self.bvtHandlePanelOpen === "function") {
+    self.bvtHandlePanelOpen();
+  }
+
   host.style.cssText = hostCss(await panelSide(), true);
   isOpen = true;
 }

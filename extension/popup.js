@@ -1,6 +1,13 @@
 "use strict";
 
-const STALE_MS = 3 * 60 * 1000;
+const DEFAULT_SETTINGS = {
+  panelSide: "right",
+  refreshMode: "open",
+  showLastPlayed: true,
+  compactMode: false,
+};
+
+const REFRESH_COOLDOWN_MS = 30 * 1000;
 
 const PANEL_HTML = `
 <div class="bvt-panel">
@@ -38,18 +45,39 @@ const PANEL_HTML = `
 
   <section id="view-settings" class="view" hidden>
     <div class="setting">
+      <label for="refresh-mode">Refresh</label>
+      <select id="refresh-mode">
+        <option value="open">When panel opens</option>
+        <option value="manual">Manual only</option>
+      </select>
+    </div>
+
+    <label class="setting checkbox-setting">
+      <span>Show last comp played</span>
+      <input id="show-last-played" type="checkbox" />
+    </label>
+
+    <label class="setting checkbox-setting">
+      <span>Compact mode</span>
+      <input id="compact-mode" type="checkbox" />
+    </label>
+
+    <div class="setting">
       <label for="panel-side">Panel side</label>
       <select id="panel-side">
         <option value="right">Right</option>
         <option value="left">Left</option>
       </select>
     </div>
-    <p class="setting-hint">More preferences coming soon.</p>
+
+    <p class="setting-hint">Panel closed = no automatic refresh. Manual refresh has a short cooldown.</p>
   </section>
 </div>`;
 
 let panelRoot = null;
 let rankAssets = {};
+let isRefreshing = false;
+let lastManualRefreshAt = 0;
 
 let accountsEl;
 let emptyEl;
@@ -61,6 +89,9 @@ let riotIdInput;
 let regionSelect;
 let closeBtn;
 let panelSideSelect;
+let refreshModeSelect;
+let showLastPlayedInput;
+let compactModeInput;
 let tabButtons;
 
 // Called by content.js once the shadow root is created.
@@ -78,34 +109,49 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   regionSelect = root.getElementById("region");
   closeBtn = root.getElementById("close");
   panelSideSelect = root.getElementById("panel-side");
+  refreshModeSelect = root.getElementById("refresh-mode");
+  showLastPlayedInput = root.getElementById("show-last-played");
+  compactModeInput = root.getElementById("compact-mode");
   tabButtons = root.querySelectorAll(".tab");
+
+  // Expose panel-open refresh to content.js. This is intentionally not a
+  // background refresh; it only runs when the user opens the panel.
+  self.bvtHandlePanelOpen = refreshOnOpen;
+  self.bvtRefreshAll = refreshAll;
 
   init();
 };
 
 async function init() {
+  await loadSettings();
   await render();
+
   addForm.addEventListener("submit", onAdd);
-  refreshBtn.addEventListener("click", refreshAll);
+  refreshBtn.addEventListener("click", () => refreshAll({ manual: true }));
   accountsEl.addEventListener("click", onAccountsClick);
   closeBtn.addEventListener("click", () => self.bvtClosePanel());
   tabButtons.forEach((tab) => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
   });
+
   panelSideSelect.addEventListener("change", saveSettings);
-  loadSettings();
+  refreshModeSelect.addEventListener("change", saveSettings);
+  showLastPlayedInput.addEventListener("change", saveSettings);
+  compactModeInput.addEventListener("change", saveSettings);
 
   loadRankAssets().then((assets) => {
     rankAssets = assets;
     render();
   });
-  refreshStale();
 
-  // The panel stays mounted, so re-render when a background refresh or
-  // another tab's panel updates stored data.
+  // The panel stays mounted, so re-render when another tab's panel updates
+  // stored data or settings change.
   chrome.storage.onChanged.addListener((changes, area) => {
-    if ((area === "local" && changes.cache) || (area === "sync" && changes.accounts)) {
-      render();
+    if (
+      (area === "local" && changes.cache) ||
+      (area === "sync" && (changes.accounts || changes.settings))
+    ) {
+      loadSettings().then(render);
     }
   });
 }
@@ -120,16 +166,31 @@ function switchView(name) {
   panelRoot.getElementById("view-settings").hidden = name !== "settings";
 }
 
-async function loadSettings() {
+async function getSettings() {
   const { settings } = await chrome.storage.sync.get("settings");
-  panelSideSelect.value = (settings && settings.panelSide) || "right";
+  return { ...DEFAULT_SETTINGS, ...(settings || {}) };
+}
+
+async function loadSettings() {
+  const settings = await getSettings();
+  panelSideSelect.value = settings.panelSide;
+  refreshModeSelect.value = settings.refreshMode;
+  showLastPlayedInput.checked = Boolean(settings.showLastPlayed);
+  compactModeInput.checked = Boolean(settings.compactMode);
+  panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
+  return settings;
 }
 
 async function saveSettings() {
-  const { settings } = await chrome.storage.sync.get("settings");
-  await chrome.storage.sync.set({
-    settings: { ...(settings || {}), panelSide: panelSideSelect.value },
-  });
+  const settings = {
+    panelSide: panelSideSelect.value,
+    refreshMode: refreshModeSelect.value,
+    showLastPlayed: showLastPlayedInput.checked,
+    compactMode: compactModeInput.checked,
+  };
+  await chrome.storage.sync.set({ settings });
+  panelRoot.querySelector(".bvt-panel").classList.toggle("compact", settings.compactMode);
+  await render();
 }
 
 // --- Storage ----------------------------------------------------------------
@@ -160,8 +221,10 @@ async function mergeCache(id, entry) {
 async function render() {
   const accounts = await getAccounts();
   const { cache, lastRefresh } = await getState();
+  const settings = await getSettings();
 
   emptyEl.hidden = accounts.length > 0;
+  panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
 
   const rows = accounts.map((account) => ({
     account,
@@ -171,17 +234,17 @@ async function render() {
 
   let position = 0;
   accountsEl.innerHTML = rows
-    .map(({ account, entry }) => cardHtml(account, entry, entry?.data ? ++position : 0))
+    .map(({ account, entry }) => cardHtml(account, entry, entry?.data ? ++position : 0, settings))
     .join("");
 
   updatedEl.textContent = lastRefresh ? `Updated ${timeAgo(lastRefresh)}` : "";
 }
 
 function eloOf(entry) {
-  return entry && entry.data ? entry.data.current.elo : -1;
+  return entry && entry.data && entry.data.current ? entry.data.current.elo : -1;
 }
 
-function cardHtml(account, entry, position) {
+function cardHtml(account, entry, position, settings) {
   const id = accountId(account);
   const posClass = position === 1 ? "gold" : position === 2 ? "silver" : position === 3 ? "bronze" : "";
   const pos = `<div class="pos ${posClass}">${position || "&middot;"}</div>`;
@@ -192,16 +255,18 @@ function cardHtml(account, entry, position) {
 
   if (!entry) {
     return shell(pos, "#6b7a89", emptyAvatar(),
-      `<div class="card-top">${riotId}${removeBtn}</div><div class="card-msg">Loading&hellip;</div>`);
+      `<div class="card-top">${riotId}${removeBtn}</div><div class="card-msg">Not refreshed yet.</div>`);
   }
   if (entry.error) {
+    const updated = entry.fetchedAt ? `<div class="card-msg">Updated ${timeAgo(entry.fetchedAt)}</div>` : "";
     return shell(pos, "#c0395a", emptyAvatar(),
       `<div class="card-top">${riotId}${removeBtn}</div>` +
-      `<div class="card-msg error">${esc(entry.error)}</div>`);
+      `<div class="card-msg error">${esc(entry.error)}</div>${updated}`);
   }
 
-  const d = entry.data;
-  const c = d.current;
+  const d = entry.data || {};
+  const c = d.current || {};
+  const recent = Array.isArray(d.recent) ? d.recent : [];
   const color = rankColor(c.tierId, rankAssets);
   const icon = rankIcon(c.tierId, rankAssets);
   const iconEl = icon
@@ -215,13 +280,30 @@ function cardHtml(account, entry, position) {
   const level = profile.level ? `<span class="level">Lvl ${profile.level}</span>` : "";
   const top = `<div class="card-top">${riotId}${level}${removeBtn}</div>`;
 
-  const deltaCls = c.lastChange > 0 ? "win" : c.lastChange < 0 ? "loss" : "draw";
-  const arrow = c.lastChange > 0 ? "&#9650;" : c.lastChange < 0 ? "&#9660;" : "";
-  const deltaText = c.lastChange === 0 ? "0" : `${arrow}${Math.abs(c.lastChange)}`;
-  const rrPct = Math.min(100, Math.max(0, c.rr));
+  const rr = Number.isFinite(c.rr) ? c.rr : 0;
+  const lastChange = Number.isFinite(c.lastChange) ? c.lastChange : 0;
+  const deltaCls = lastChange > 0 ? "win" : lastChange < 0 ? "loss" : "draw";
+  const arrow = lastChange > 0 ? "&#9650;" : lastChange < 0 ? "&#9660;" : "";
+  const deltaText = lastChange === 0 ? "0" : `${arrow}${Math.abs(lastChange)}`;
+  const rrPct = Math.min(100, Math.max(0, rr));
   const placements = c.inPlacements ? `<span class="badge">Placements</span>` : "";
+  const rankName = c.tier || "Unrated";
+  const rrText = c.inPlacements ? "Placements" : `${rr} RR`;
+  const updatedEl = entry.fetchedAt ? `<span>Updated <strong>${timeAgo(entry.fetchedAt)}</strong></span>` : "";
 
-  const session = sessionSummary(d.recent);
+  if (settings.compactMode) {
+    const compactLastPlayed = settings.showLastPlayed
+      ? `<div class="last-played compact-last">${esc(lastCompPlayedText(recent))}</div>`
+      : "";
+    return shell(pos, color, avatar,
+      top +
+      `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${esc(rrText)}</span>` +
+      `<span class="delta ${deltaCls}">${deltaText}</span></div>` +
+      compactLastPlayed +
+      `<div class="meta">${updatedEl}</div>`);
+  }
+
+  const session = sessionSummary(recent);
   const sessionEl = session
     ? `<div class="session">Today &nbsp;` +
       `<strong class="${session.rr >= 0 ? "win" : "loss"}">${signed(session.rr)} RR</strong>` +
@@ -229,26 +311,32 @@ function cardHtml(account, entry, position) {
     : "";
 
   const pips =
-    d.recent
+    recent
       .map(
         (m) =>
-          `<span class="pip ${m.result}" title="${esc(m.map)} &middot; ${esc(m.tier)}">` +
-          `${signed(m.rrChange)}</span>`,
+          `<span class="pip ${esc(m.result || "draw")}" title="${esc(m.map || "Unknown map")} &middot; ${esc(m.tier || "")}">` +
+          `${signed(Number(m.rrChange || 0))}</span>`,
       )
       .join("") || `<span class="card-msg">No recent matches</span>`;
+
+  const lastPlayedEl = settings.showLastPlayed
+    ? `<div class="last-played">${esc(lastCompPlayedText(recent))}</div>`
+    : "";
 
   const body =
     top +
     `<div class="rank-line">${iconEl}` +
     `<div class="rank-info">` +
-    `<div class="rank-name">${esc(c.tier)} ${placements}</div>` +
+    `<div class="rank-name">${esc(rankName)} ${placements}</div>` +
     `<div class="rr-bar"><span style="width:${rrPct}%;background:${color}"></span></div>` +
     `</div>` +
-    `<div class="rr-side"><div class="rr-val">${c.rr} RR</div>` +
+    `<div class="rr-side"><div class="rr-val">${esc(rrText)}</div>` +
     `<div class="delta ${deltaCls}">${deltaText}</div></div>` +
     `</div>` +
-    `<div class="meta"><span>Peak <strong>${esc(d.peak.tier)}</strong></span>` +
-    `<span>Act ${d.act.games > 0 ? `${d.act.wins}W ${d.act.losses}L` : "&mdash;"}</span></div>` +
+    `<div class="meta"><span>Peak <strong>${esc(d.peak?.tier || "—")}</strong></span>` +
+    `<span>Act ${d.act && d.act.games > 0 ? `${d.act.wins}W ${d.act.losses}L` : "&mdash;"}</span>` +
+    `${updatedEl}</div>` +
+    lastPlayedEl +
     sessionEl +
     `<div class="recent">${pips}</div>`;
 
@@ -269,9 +357,28 @@ function sessionSummary(recent) {
   const games = recent.filter((m) => m.date && new Date(m.date).toDateString() === today);
   if (games.length === 0) return null;
   return {
-    rr: games.reduce((sum, m) => sum + m.rrChange, 0),
+    rr: games.reduce((sum, m) => sum + Number(m.rrChange || 0), 0),
     count: games.length,
   };
+}
+
+function lastCompPlayedText(recent) {
+  const matches = recent
+    .filter((m) => m && m.date && isCompetitiveMatch(m))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  if (matches.length === 0) return "Last comp played: No recent comp games found";
+  return `Last comp played: ${timeAgo(matches[0].date)}`;
+}
+
+function isCompetitiveMatch(match) {
+  const possibleMode = `${match.mode || ""} ${match.queue || ""} ${match.queueId || ""}`.toLowerCase();
+  if (possibleMode.includes("competitive") || possibleMode.includes("comp")) return true;
+
+  // The current Worker data already appears to return ranked recent matches.
+  // If mode/queue is missing, treat matches with RR changes or rank tier data
+  // as competitive so the feature works without an extra match-history call.
+  return Number.isFinite(Number(match.rrChange)) || Boolean(match.tier);
 }
 
 // --- Actions ----------------------------------------------------------------
@@ -306,6 +413,7 @@ async function onAdd(event) {
 
   const entry = await fetchAccountData(account);
   await mergeCache(accountId(account), entry);
+  await chrome.storage.local.set({ lastRefresh: Date.now() });
   await render();
 }
 
@@ -323,11 +431,31 @@ async function onAccountsClick(event) {
   await render();
 }
 
-async function refreshAll() {
-  const accounts = await getAccounts();
-  if (accounts.length === 0) return;
+async function refreshOnOpen() {
+  const settings = await getSettings();
+  if (settings.refreshMode !== "open") return;
+  await refreshAll({ manual: false });
+}
 
+async function refreshAll(options = {}) {
+  const accounts = await getAccounts();
+  if (accounts.length === 0 || isRefreshing) return;
+
+  if (options.manual) {
+    const now = Date.now();
+    const waitMs = REFRESH_COOLDOWN_MS - (now - lastManualRefreshAt);
+    if (waitMs > 0) {
+      showStatus(`Please wait ${Math.ceil(waitMs / 1000)}s before refreshing again.`);
+      return;
+    }
+    lastManualRefreshAt = now;
+  }
+
+  hideStatus();
+  isRefreshing = true;
   refreshBtn.classList.add("spinning");
+  refreshBtn.disabled = true;
+
   const { cache } = await getState();
   await Promise.all(
     accounts.map(async (account) => {
@@ -335,26 +463,10 @@ async function refreshAll() {
     }),
   );
   await chrome.storage.local.set({ cache, lastRefresh: Date.now() });
+
   refreshBtn.classList.remove("spinning");
-  await render();
-}
-
-async function refreshStale() {
-  const accounts = await getAccounts();
-  const { cache } = await getState();
-  const now = Date.now();
-  const stale = accounts.filter((account) => {
-    const entry = cache[accountId(account)];
-    return !entry || entry.error || now - entry.fetchedAt > STALE_MS;
-  });
-  if (stale.length === 0) return;
-
-  await Promise.all(
-    stale.map(async (account) => {
-      cache[accountId(account)] = await fetchAccountData(account);
-    }),
-  );
-  await chrome.storage.local.set({ cache, lastRefresh: Date.now() });
+  refreshBtn.disabled = false;
+  isRefreshing = false;
   await render();
 }
 
@@ -382,11 +494,26 @@ function signed(n) {
 }
 
 function timeAgo(ts) {
-  const seconds = Math.floor((Date.now() - ts) / 1000);
+  const then = typeof ts === "number" ? ts : new Date(ts).getTime();
+  if (!Number.isFinite(then)) return "unknown";
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
   if (seconds < 60) return "just now";
+
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
-  return `${Math.floor(minutes / 60)}h ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days} days ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
+
+  const years = Math.floor(months / 12);
+  return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
 function showStatus(message) {
