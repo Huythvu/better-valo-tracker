@@ -6,4 +6,4 @@ compatibility_date = "2025-01-01"
 #   npx wrangler secret put HENRIKDEV_API_KEY
 #
 # Response caching uses the Cloudflare Cache API (caches.default), which has
-# no write quota â€” so no KV namespace binding is required.
+# no write quota - so no KV namespace binding is required.

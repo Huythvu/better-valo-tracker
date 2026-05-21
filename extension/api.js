@@ -5,7 +5,7 @@ self.accountId = function accountId(account) {
   return `${account.region}:${account.name}:${account.tag}`.toLowerCase();
 };
 
-// Fetches one account from the Worker. Always resolves â€” never throws â€” so
+// Fetches one account from the Worker. Always resolves - never throws - so
 // callers get either { data, fetchedAt } or { error, fetchedAt }.
 self.fetchAccountData = async function fetchAccountData(account) {
   const url =
@@ -29,6 +29,6 @@ self.fetchAccountData = async function fetchAccountData(account) {
     }
     return { data: body, fetchedAt: Date.now() };
   } catch {
-    return { error: "Network error â€” is the Worker URL correct?", fetchedAt: Date.now() };
+    return { error: "Network error - is the Worker URL correct?", fetchedAt: Date.now() };
   }
 };
