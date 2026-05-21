@@ -770,17 +770,18 @@ strong.loss {
 }
 
 .card.pinned {
+  position: relative;
   background: linear-gradient(135deg, #243141, #1b2632);
   box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18);
 }
 
-.card.pinned[draggable="true"] {
-  cursor: grab;
+.card.pinned .avatar-col {
+  position: relative;
+  align-self: stretch;
 }
 
 .card.pinned.dragging {
   opacity: 0.55;
-  cursor: grabbing;
 }
 
 .card.pinned.drop-target {
@@ -817,6 +818,9 @@ strong.loss {
 }
 
 .drag-handle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   width: 22px;
   height: 16px;
   display: inline-flex;
@@ -826,6 +830,7 @@ strong.loss {
   gap: 3px;
   cursor: grab;
   opacity: 0.68;
+  transform: translate(-50%, -50%);
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
@@ -838,7 +843,7 @@ strong.loss {
 
 .drag-handle:hover {
   opacity: 1;
-  transform: translateY(-1px);
+  transform: translate(-50%, -50%) scale(1.04);
 }
 
 .drag-handle:hover span {
@@ -850,10 +855,20 @@ strong.loss {
   width: 16px;
 }
 
+.compact .card.pinned .avatar-col {
+  align-self: flex-start;
+}
+
 .compact .drag-handle {
+  position: static;
   width: 20px;
   height: 14px;
   gap: 2px;
+  transform: none;
+}
+
+.compact .drag-handle:hover {
+  transform: translateY(-1px);
 }
 
 .compact .drag-handle span {

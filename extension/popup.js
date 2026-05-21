@@ -435,11 +435,10 @@ function shell(account, posBadge, accent, avatar, inner) {
   const id = accountId(account);
   const pinned = Boolean(account.pinned);
   const classes = pinned ? "card pinned" : "card";
-  const draggable = pinned ? ' draggable="true"' : "";
   const dragHandle = pinned
-    ? `<button class="drag-handle" title="Drag to reorder pinned accounts" type="button" aria-label="Drag to reorder pinned accounts"><span></span><span></span><span></span></button>`
+    ? `<button class="drag-handle" draggable="true" title="Drag to reorder pinned accounts" type="button" aria-label="Drag to reorder pinned accounts"><span></span><span></span><span></span></button>`
     : "";
-  return `<div class="${classes}" data-id="${esc(id)}"${draggable} style="border-left-color:${accent}">` +
+  return `<div class="${classes}" data-id="${esc(id)}" style="border-left-color:${accent}">` +
     `${posBadge}<div class="avatar-col">${avatar}${dragHandle}</div><div class="card-main">${inner}</div></div>`;
 }
 
@@ -710,9 +709,10 @@ function normalizePinnedOrder(accounts) {
 }
 
 function onPinnedDragStart(event) {
-  if (!event.target.closest(".drag-handle")) return;
+  const handle = event.target.closest(".drag-handle");
+  if (!handle) return;
 
-  const card = event.target.closest(".card.pinned");
+  const card = handle.closest(".card.pinned");
   if (!card) return;
 
   draggedPinnedId = card.dataset.id;
