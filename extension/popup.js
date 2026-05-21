@@ -77,6 +77,7 @@ let panelRoot = null;
 let rankAssets = {};
 let isRefreshing = false;
 let lastManualRefreshAt = 0;
+let draggedPinnedId = null;
 
 let accountsEl;
 let emptyEl;
@@ -126,6 +127,11 @@ async function init() {
   addForm.addEventListener("submit", onAdd);
   refreshBtn.addEventListener("click", () => refreshAll({ manual: true }));
   accountsEl.addEventListener("click", onAccountsClick);
+  accountsEl.addEventListener("dragstart", onPinnedDragStart);
+  accountsEl.addEventListener("dragover", onPinnedDragOver);
+  accountsEl.addEventListener("dragleave", onPinnedDragLeave);
+  accountsEl.addEventListener("drop", onPinnedDrop);
+  accountsEl.addEventListener("dragend", onPinnedDragEnd);
   closeBtn.addEventListener("click", () => self.bvtClosePanel());
   tabButtons.forEach((tab) => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
@@ -223,17 +229,77 @@ async function render() {
   emptyEl.hidden = accounts.length > 0;
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
 
-  const rows = accounts.map((account) => ({
-    account,
-    entry: cache[accountId(account)] || null,
-  }));
-  rows.sort((a, b) => eloOf(b.entry) - eloOf(a.entry));
+  const rows = sortedAccountRows(accounts, cache);
 
   let position = 0;
-  accountsEl.innerHTML = rows
-    .map(({ account, entry }) => cardHtml(account, entry, entry?.data ? ++position : 0, settings))
-    .join("");
+  animateCards(() => {
+    accountsEl.innerHTML = rows
+      .map(({ account, entry }) => cardHtml(account, entry, entry?.data ? ++position : 0, settings))
+      .join("");
+  });
 
+}
+
+function sortedAccountRows(accounts, cache) {
+  return accounts
+    .map((account, index) => ({
+      account,
+      index,
+      entry: cache[accountId(account)] || null,
+    }))
+    .sort((a, b) => {
+      const aPinned = Boolean(a.account.pinned);
+      const bPinned = Boolean(b.account.pinned);
+      if (aPinned !== bPinned) return aPinned ? -1 : 1;
+      if (aPinned && bPinned) {
+        return pinOrderOf(a.account, a.index) - pinOrderOf(b.account, b.index);
+      }
+      return eloOf(b.entry) - eloOf(a.entry);
+    });
+}
+
+function pinOrderOf(account, fallback) {
+  return Number.isFinite(Number(account.pinOrder)) ? Number(account.pinOrder) : fallback;
+}
+
+function animateCards(updateDom) {
+  if (!accountsEl || typeof accountsEl.querySelectorAll !== "function") {
+    updateDom();
+    return;
+  }
+
+  const before = new Map(
+    Array.from(accountsEl.querySelectorAll(".card[data-id]")).map((card) => [
+      card.dataset.id,
+      card.getBoundingClientRect(),
+    ]),
+  );
+
+  updateDom();
+
+  if (!before.size) return;
+
+  requestAnimationFrame(() => {
+    accountsEl.querySelectorAll(".card[data-id]").forEach((card) => {
+      const previous = before.get(card.dataset.id);
+      if (!previous) return;
+
+      const current = card.getBoundingClientRect();
+      const dx = previous.left - current.left;
+      const dy = previous.top - current.top;
+      if (!dx && !dy) return;
+
+      card.style.transition = "none";
+      card.style.transform = `translate(${dx}px, ${dy}px)`;
+      card.style.opacity = "0.78";
+
+      requestAnimationFrame(() => {
+        card.style.transition = "transform 220ms ease, opacity 220ms ease";
+        card.style.transform = "translate(0, 0)";
+        card.style.opacity = "1";
+      });
+    });
+  });
 }
 
 function eloOf(entry) {
@@ -244,18 +310,24 @@ function cardHtml(account, entry, position, settings) {
   const id = accountId(account);
   const posClass = position === 1 ? "gold" : position === 2 ? "silver" : position === 3 ? "bronze" : "";
   const pos = `<div class="pos ${posClass}">${position || "&middot;"}</div>`;
+  const isPinned = Boolean(account.pinned);
+  const pinBtn =
+    `<button class="pin ${isPinned ? "active" : ""}" data-id="${esc(id)}" title="${isPinned ? "Unpin account" : "Pin account"}" type="button" aria-label="${isPinned ? "Unpin account" : "Pin account"}">${isPinned ? "★" : "☆"}</button>`;
+  const dragHandle = isPinned
+    ? `<button class="drag-handle" title="Drag to reorder pinned accounts" type="button" aria-label="Drag to reorder pinned accounts">⋮⋮</button>`
+    : "";
   const removeBtn =
     `<button class="remove" data-id="${esc(id)}" title="Remove" type="button">&times;</button>`;
   const riotId =
     `<span class="riot-id">${esc(account.name)}<span class="tag">#${esc(account.tag)}</span></span>`;
 
   if (!entry) {
-    return shell(pos, "#6b7a89", emptyAvatar(),
-      `<div class="card-top">${riotId}${removeBtn}</div><div class="card-msg">Not refreshed yet.</div>`);
+    return shell(account, pos, "#6b7a89", emptyAvatar(),
+      `<div class="card-top">${dragHandle}${pinBtn}${riotId}${removeBtn}</div><div class="card-msg">Not refreshed yet.</div>`);
   }
   if (entry.error) {
-    return shell(pos, "#c0395a", emptyAvatar(),
-      `<div class="card-top">${riotId}${removeBtn}</div>` +
+    return shell(account, pos, "#c0395a", emptyAvatar(),
+      `<div class="card-top">${dragHandle}${pinBtn}${riotId}${removeBtn}</div>` +
       `<div class="card-msg error">${esc(entry.error)}</div>`);
   }
 
@@ -273,7 +345,7 @@ function cardHtml(account, entry, position, settings) {
     ? `<div class="avatar" style="background-image:url('${esc(profile.cardUrl)}')"></div>`
     : emptyAvatar();
   const level = profile.level ? `<span class="level">Lvl ${profile.level}</span>` : "";
-  const top = `<div class="card-top">${riotId}${level}${removeBtn}</div>`;
+  const top = `<div class="card-top">${dragHandle}${pinBtn}${riotId}${level}${removeBtn}</div>`;
 
   const rr = Number.isFinite(c.rr) ? c.rr : 0;
   const lastChange = Number.isFinite(c.lastChange) ? c.lastChange : 0;
@@ -288,7 +360,7 @@ function cardHtml(account, entry, position, settings) {
     const compactLastPlayed = settings.showLastPlayed
       ? `<div class="last-played compact-last">${esc(lastCompPlayedText(recent))}</div>`
       : "";
-    return shell(pos, color, avatar,
+    return shell(account, pos, color, avatar,
       top +
       `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${esc(rrText)}</span>` +
       `<span class="delta ${deltaCls}">${deltaText}</span></div>` +
@@ -332,11 +404,15 @@ function cardHtml(account, entry, position, settings) {
     sessionEl +
     `<div class="recent">${pips}</div>`;
 
-  return shell(pos, color, avatar, body);
+  return shell(account, pos, color, avatar, body);
 }
 
-function shell(posBadge, accent, avatar, inner) {
-  return `<div class="card" style="border-left-color:${accent}">` +
+function shell(account, posBadge, accent, avatar, inner) {
+  const id = accountId(account);
+  const pinned = Boolean(account.pinned);
+  const classes = pinned ? "card pinned" : "card";
+  const draggable = pinned ? ' draggable="true"' : "";
+  return `<div class="${classes}" data-id="${esc(id)}"${draggable} style="border-left-color:${accent}">` +
     `${posBadge}${avatar}<div class="card-main">${inner}</div></div>`;
 }
 
@@ -410,16 +486,120 @@ async function onAdd(event) {
 }
 
 async function onAccountsClick(event) {
-  const button = event.target.closest(".remove");
-  if (!button) return;
+  const pinButton = event.target.closest(".pin");
+  if (pinButton) {
+    await togglePinned(pinButton.dataset.id);
+    return;
+  }
 
-  const id = button.dataset.id;
+  const removeButton = event.target.closest(".remove");
+  if (!removeButton) return;
+
+  const id = removeButton.dataset.id;
   const accounts = await getAccounts();
   await setAccounts(accounts.filter((a) => accountId(a) !== id));
 
   const { cache } = await getState();
   delete cache[id];
   await chrome.storage.local.set({ cache });
+  await render();
+}
+
+async function togglePinned(id) {
+  const accounts = await getAccounts();
+  const maxPinOrder = accounts.reduce((max, account, index) => {
+    if (!account.pinned) return max;
+    return Math.max(max, pinOrderOf(account, index));
+  }, -1);
+
+  const nextAccounts = accounts.map((account) => {
+    if (accountId(account) !== id) return account;
+    if (account.pinned) {
+      const { pinned, pinOrder, ...rest } = account;
+      return rest;
+    }
+    return { ...account, pinned: true, pinOrder: maxPinOrder + 1 };
+  });
+
+  await setAccounts(normalizePinnedOrder(nextAccounts));
+  await render();
+}
+
+function normalizePinnedOrder(accounts) {
+  const pinned = accounts
+    .map((account, index) => ({ account, index }))
+    .filter(({ account }) => account.pinned)
+    .sort((a, b) => pinOrderOf(a.account, a.index) - pinOrderOf(b.account, b.index));
+
+  const orderById = new Map(
+    pinned.map(({ account }, index) => [accountId(account), index]),
+  );
+
+  return accounts.map((account) => {
+    if (!account.pinned) return account;
+    return { ...account, pinOrder: orderById.get(accountId(account)) ?? 0 };
+  });
+}
+
+function onPinnedDragStart(event) {
+  const card = event.target.closest(".card.pinned");
+  if (!card) return;
+
+  draggedPinnedId = card.dataset.id;
+  card.classList.add("dragging");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", draggedPinnedId);
+}
+
+function onPinnedDragOver(event) {
+  const card = event.target.closest(".card.pinned");
+  if (!card || !draggedPinnedId || card.dataset.id === draggedPinnedId) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "move";
+  card.classList.add("drop-target");
+}
+
+function onPinnedDragLeave(event) {
+  const card = event.target.closest(".card.pinned");
+  if (card) card.classList.remove("drop-target");
+}
+
+async function onPinnedDrop(event) {
+  const targetCard = event.target.closest(".card.pinned");
+  if (!targetCard || !draggedPinnedId || targetCard.dataset.id === draggedPinnedId) return;
+
+  event.preventDefault();
+  await movePinnedAccount(draggedPinnedId, targetCard.dataset.id);
+}
+
+function onPinnedDragEnd() {
+  draggedPinnedId = null;
+  accountsEl.querySelectorAll(".card.dragging, .card.drop-target").forEach((card) => {
+    card.classList.remove("dragging", "drop-target");
+  });
+}
+
+async function movePinnedAccount(fromId, toId) {
+  const accounts = normalizePinnedOrder(await getAccounts());
+  const pinned = accounts
+    .filter((account) => account.pinned)
+    .sort((a, b) => pinOrderOf(a, 0) - pinOrderOf(b, 0));
+
+  const fromIndex = pinned.findIndex((account) => accountId(account) === fromId);
+  const toIndex = pinned.findIndex((account) => accountId(account) === toId);
+  if (fromIndex < 0 || toIndex < 0) return;
+
+  const [moved] = pinned.splice(fromIndex, 1);
+  pinned.splice(toIndex, 0, moved);
+
+  const newOrders = new Map(pinned.map((account, index) => [accountId(account), index]));
+  const nextAccounts = accounts.map((account) => {
+    if (!account.pinned) return account;
+    return { ...account, pinOrder: newOrders.get(accountId(account)) ?? 0 };
+  });
+
+  await setAccounts(nextAccounts);
   await render();
 }
 

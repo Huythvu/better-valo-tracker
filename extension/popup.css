@@ -544,3 +544,78 @@ strong.loss {
 .compact .recent {
   display: none;
 }
+
+/* --- Pinning / pinned reorder --- */
+
+.card {
+  transition: transform 220ms ease, opacity 220ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.card.pinned {
+  background: linear-gradient(135deg, #243141, #1b2632);
+  box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.card.pinned[draggable="true"] {
+  cursor: grab;
+}
+
+.card.pinned.dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.card.pinned.drop-target {
+  outline: 1px dashed rgba(255, 212, 84, 0.75);
+  outline-offset: 2px;
+  transform: translateY(1px);
+}
+
+.pin,
+.drag-handle {
+  flex: 0 0 auto;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+
+.pin {
+  width: 18px;
+  font-size: 15px;
+  transform-origin: center;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.pin:hover {
+  color: #ffd454;
+  transform: scale(1.08);
+}
+
+.pin.active {
+  color: #ffd454;
+}
+
+.drag-handle {
+  color: var(--gray);
+  cursor: grab;
+  font-size: 13px;
+  letter-spacing: -3px;
+  margin-right: 1px;
+  transform: rotate(90deg);
+}
+
+.drag-handle:hover {
+  color: var(--text);
+}
+
+.compact .pin {
+  font-size: 14px;
+  width: 16px;
+}
+
+.compact .drag-handle {
+  font-size: 12px;
+}
