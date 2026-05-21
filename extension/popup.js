@@ -194,7 +194,7 @@ async function refreshStale() {
   const now = Date.now();
   const stale = accounts.filter((account) => {
     const entry = cache[accountId(account)];
-    return !entry || now - entry.fetchedAt > STALE_MS;
+    return !entry || entry.error || now - entry.fetchedAt > STALE_MS;
   });
   if (stale.length === 0) return;
 
