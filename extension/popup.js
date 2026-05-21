@@ -81,17 +81,19 @@ function cardHtml(account, entry, position) {
   const id = accountId(account);
   const posClass = position === 1 ? "gold" : position === 2 ? "silver" : position === 3 ? "bronze" : "";
   const pos = `<div class="pos ${posClass}">${position || "&middot;"}</div>`;
-  const top =
-    `<div class="card-top">` +
-    `<span class="riot-id">${esc(account.name)}<span class="tag">#${esc(account.tag)}</span></span>` +
-    `<button class="remove" data-id="${esc(id)}" title="Remove" type="button">&times;</button>` +
-    `</div>`;
+  const removeBtn =
+    `<button class="remove" data-id="${esc(id)}" title="Remove" type="button">&times;</button>`;
+  const riotId =
+    `<span class="riot-id">${esc(account.name)}<span class="tag">#${esc(account.tag)}</span></span>`;
 
   if (!entry) {
-    return shell(pos, "#6b7a89", `${top}<div class="card-msg">Loading&hellip;</div>`);
+    return shell(pos, "#6b7a89", emptyAvatar(),
+      `<div class="card-top">${riotId}${removeBtn}</div><div class="card-msg">Loading&hellip;</div>`);
   }
   if (entry.error) {
-    return shell(pos, "#c0395a", `${top}<div class="card-msg error">${esc(entry.error)}</div>`);
+    return shell(pos, "#c0395a", emptyAvatar(),
+      `<div class="card-top">${riotId}${removeBtn}</div>` +
+      `<div class="card-msg error">${esc(entry.error)}</div>`);
   }
 
   const d = entry.data;
@@ -101,6 +103,13 @@ function cardHtml(account, entry, position) {
   const iconEl = icon
     ? `<img class="rank-icon" src="${esc(icon)}" alt="" />`
     : `<div class="rank-icon placeholder" style="background:${color}"></div>`;
+
+  const profile = d.profile || {};
+  const avatar = profile.cardUrl
+    ? `<div class="avatar" style="background-image:url('${esc(profile.cardUrl)}')"></div>`
+    : emptyAvatar();
+  const level = profile.level ? `<span class="level">Lvl ${profile.level}</span>` : "";
+  const top = `<div class="card-top">${riotId}${level}${removeBtn}</div>`;
 
   const deltaCls = c.lastChange > 0 ? "win" : c.lastChange < 0 ? "loss" : "draw";
   const arrow = c.lastChange > 0 ? "&#9650;" : c.lastChange < 0 ? "&#9660;" : "";
@@ -139,12 +148,16 @@ function cardHtml(account, entry, position) {
     sessionEl +
     `<div class="recent">${pips}</div>`;
 
-  return shell(pos, color, body);
+  return shell(pos, color, avatar, body);
 }
 
-function shell(posBadge, accent, inner) {
+function emptyAvatar() {
+  return `<div class="avatar"></div>`;
+}
+
+function shell(posBadge, accent, avatar, inner) {
   return `<div class="card" style="border-left-color:${accent}">` +
-    `${posBadge}<div class="card-main">${inner}</div></div>`;
+    `${posBadge}${avatar}<div class="card-main">${inner}</div></div>`;
 }
 
 function sessionSummary(recent) {

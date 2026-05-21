@@ -180,13 +180,33 @@ h1::before {
   min-width: 0;
 }
 
+.avatar {
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 6px;
+  background-color: #0c141c;
+  background-size: cover;
+  background-position: center;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+.level {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .card-top {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  gap: 6px;
 }
 
 .riot-id {
+  flex: 1;
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;

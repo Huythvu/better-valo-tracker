@@ -52,12 +52,20 @@ interface HenrikHistory {
   data?: { history?: HenrikHistoryEntry[] };
 }
 
+interface HenrikAccount {
+  data?: {
+    account_level?: number;
+    card?: string;
+  };
+}
+
 // --- The contract returned to the extension ---------------------------------
 
 interface AccountPayload {
   name: string;
   tag: string;
   region: string;
+  profile: { level: number; cardUrl: string | null };
   current: {
     tier: string;
     tierId: number;
@@ -168,11 +176,13 @@ async function fetchAccount(
   apiKey: string,
 ): Promise<AccountPayload> {
   const headers = { Authorization: apiKey };
-  const path = `${region}/pc/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`;
+  const id = `${encodeURIComponent(name)}/${encodeURIComponent(tag)}`;
+  const path = `${region}/pc/${id}`;
 
-  const [mmrRes, histRes] = await Promise.all([
+  const [mmrRes, histRes, acctRes] = await Promise.all([
     fetch(`${HENRIK_BASE}/v3/mmr/${path}`, { headers }),
     fetch(`${HENRIK_BASE}/v2/mmr-history/${path}`, { headers }),
+    fetch(`${HENRIK_BASE}/v2/account/${id}`, { headers }),
   ]);
 
   if (mmrRes.status === 404) {
@@ -190,14 +200,20 @@ async function fetchAccount(
 
   const mmr = (await mmrRes.json()) as HenrikMmr;
 
-  // History is best-effort: a card without recent matches still beats no card.
+  // History and account are best-effort: the rank card still renders without
+  // recent matches or a profile picture.
   let history: HenrikHistoryEntry[] = [];
   if (histRes.ok) {
     const parsed = (await histRes.json()) as HenrikHistory;
     history = parsed.data?.history ?? [];
   }
 
-  return shape(name, tag, region, mmr, history);
+  let account: HenrikAccount = {};
+  if (acctRes.ok) {
+    account = (await acctRes.json()) as HenrikAccount;
+  }
+
+  return shape(name, tag, region, mmr, history, account);
 }
 
 function shape(
@@ -206,6 +222,7 @@ function shape(
   region: string,
   mmr: HenrikMmr,
   history: HenrikHistoryEntry[],
+  account: HenrikAccount,
 ): AccountPayload {
   const data = mmr.data ?? {};
   const current = data.current ?? {};
@@ -226,10 +243,18 @@ function shape(
     };
   });
 
+  const cardId = account.data?.card;
+
   return {
     name: data.account?.name ?? name,
     tag: data.account?.tag ?? tag,
     region,
+    profile: {
+      level: account.data?.account_level ?? 0,
+      cardUrl: cardId
+        ? `https://media.valorant-api.com/playercards/${cardId}/smallart.png`
+        : null,
+    },
     current: {
       tier: current.tier?.name ?? "Unrated",
       tierId: current.tier?.id ?? 0,
