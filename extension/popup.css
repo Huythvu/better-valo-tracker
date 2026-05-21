@@ -790,8 +790,7 @@ strong.loss {
   transform: translateY(1px);
 }
 
-.pin,
-.drag-handle {
+.pin {
   flex: 0 0 auto;
   background: none;
   border: none;
@@ -799,6 +798,15 @@ strong.loss {
   cursor: pointer;
   line-height: 1;
   padding: 0;
+}
+
+.drag-handle {
+  flex: 0 0 auto;
+  color: var(--muted);
+  line-height: 1;
+  padding: 0;
+  pointer-events: none;
+  user-select: none;
 }
 
 .pin {
@@ -828,10 +836,23 @@ strong.loss {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  cursor: grab;
   opacity: 0.68;
   transform: translate(-50%, -50%);
   transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.card.pinned {
+  cursor: grab;
+}
+
+.card.pinned:active {
+  cursor: grabbing;
+}
+
+.card.pinned button,
+.card.pinned .pip,
+.card.pinned .pip-wrap {
+  cursor: auto;
 }
 
 .drag-handle span {
@@ -841,12 +862,11 @@ strong.loss {
   background: var(--gray);
 }
 
-.drag-handle:hover {
+.card.pinned:hover .drag-handle {
   opacity: 1;
-  transform: translate(-50%, -50%) scale(1.04);
 }
 
-.drag-handle:hover span {
+.card.pinned:hover .drag-handle span {
   background: var(--text);
 }
 
@@ -867,8 +887,8 @@ strong.loss {
   transform: none;
 }
 
-.compact .drag-handle:hover {
-  transform: translateY(-1px);
+.compact .card.pinned:hover .drag-handle {
+  transform: none;
 }
 
 .compact .drag-handle span {
@@ -876,3 +896,28 @@ strong.loss {
 }
 
 
+
+
+/* --- Collapsible add form --- */
+
+.show-add-form {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--text);
+  padding: 8px 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.show-add-form:hover {
+  background: rgba(255, 255, 255, 0.075);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+}
+
+.compact-popover-main {
+  grid-template-columns: 1fr 1fr;
+}

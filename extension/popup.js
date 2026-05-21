@@ -5,6 +5,7 @@ const DEFAULT_SETTINGS = {
   refreshMode: "open",
   showLastPlayed: true,
   compactMode: false,
+  hideAddFormWhenAccountsExist: true,
 };
 
 const REFRESH_COOLDOWN_MS = 30 * 1000;
@@ -37,6 +38,7 @@ const PANEL_HTML = `
       </select>
       <button type="submit">Add</button>
     </form>
+    <button id="show-add-form" class="show-add-form" type="button" hidden>+ Add player</button>
     <p id="status" class="status" hidden></p>
     <div id="accounts"></div>
     <p id="empty" class="empty">No accounts tracked yet. Add a Riot ID above.</p>
@@ -59,6 +61,11 @@ const PANEL_HTML = `
     <label class="setting checkbox-setting">
       <span>Compact mode</span>
       <input id="compact-mode" type="checkbox" />
+    </label>
+
+    <label class="setting checkbox-setting">
+      <span>Hide add player form when accounts exist</span>
+      <input id="hide-add-form" type="checkbox" />
     </label>
 
     <div class="setting">
@@ -93,6 +100,8 @@ let panelSideSelect;
 let refreshModeSelect;
 let showLastPlayedInput;
 let compactModeInput;
+let hideAddFormInput;
+let showAddFormBtn;
 let tabButtons;
 let panelEl;
 
@@ -113,6 +122,8 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   refreshModeSelect = root.getElementById("refresh-mode");
   showLastPlayedInput = root.getElementById("show-last-played");
   compactModeInput = root.getElementById("compact-mode");
+  hideAddFormInput = root.getElementById("hide-add-form");
+  showAddFormBtn = root.getElementById("show-add-form");
   tabButtons = root.querySelectorAll(".tab");
   panelEl = root.querySelector(".bvt-panel");
 
@@ -129,6 +140,7 @@ async function init() {
   await render();
 
   addForm.addEventListener("submit", onAdd);
+  showAddFormBtn.addEventListener("click", revealAddForm);
   refreshBtn.addEventListener("click", () => refreshAll({ manual: true }));
   accountsEl.addEventListener("click", onAccountsClick);
   accountsEl.addEventListener("dragstart", onPinnedDragStart);
@@ -145,6 +157,7 @@ async function init() {
   refreshModeSelect.addEventListener("change", saveSettings);
   showLastPlayedInput.addEventListener("change", saveSettings);
   compactModeInput.addEventListener("change", saveSettings);
+  hideAddFormInput.addEventListener("change", saveSettings);
 
   loadRankAssets().then((assets) => {
     rankAssets = assets;
@@ -199,6 +212,7 @@ async function loadSettings() {
   refreshModeSelect.value = settings.refreshMode;
   showLastPlayedInput.checked = Boolean(settings.showLastPlayed);
   compactModeInput.checked = Boolean(settings.compactMode);
+  hideAddFormInput.checked = Boolean(settings.hideAddFormWhenAccountsExist);
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
   return settings;
 }
@@ -209,10 +223,26 @@ async function saveSettings() {
     refreshMode: refreshModeSelect.value,
     showLastPlayed: showLastPlayedInput.checked,
     compactMode: compactModeInput.checked,
+    hideAddFormWhenAccountsExist: hideAddFormInput.checked,
   };
   await chrome.storage.sync.set({ settings });
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", settings.compactMode);
   await render();
+}
+
+function updateAddFormVisibility(accounts, settings) {
+  const shouldHide = Boolean(settings.hideAddFormWhenAccountsExist) && accounts.length > 0;
+  const isExpanded = addForm.dataset.expanded === "true";
+
+  addForm.hidden = shouldHide && !isExpanded;
+  showAddFormBtn.hidden = !shouldHide || isExpanded;
+}
+
+function revealAddForm() {
+  addForm.dataset.expanded = "true";
+  addForm.hidden = false;
+  showAddFormBtn.hidden = true;
+  riotIdInput.focus();
 }
 
 // --- Storage ----------------------------------------------------------------
@@ -247,6 +277,7 @@ async function render() {
 
   emptyEl.hidden = accounts.length > 0;
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
+  updateAddFormVisibility(accounts, settings);
 
   const rows = sortedAccountRows(accounts, cache);
   const rankPositions = rankPositionsById(accounts, cache);
@@ -436,9 +467,10 @@ function shell(account, posBadge, accent, avatar, inner) {
   const pinned = Boolean(account.pinned);
   const classes = pinned ? "card pinned" : "card";
   const dragHandle = pinned
-    ? `<button class="drag-handle" draggable="true" title="Drag to reorder pinned accounts" type="button" aria-label="Drag to reorder pinned accounts"><span></span><span></span><span></span></button>`
+    ? `<span class="drag-handle" aria-hidden="true"><span></span><span></span><span></span></span>`
     : "";
-  return `<div class="${classes}" data-id="${esc(id)}" style="border-left-color:${accent}">` +
+  const draggable = pinned ? ` draggable="true"` : "";
+  return `<div class="${classes}" data-id="${esc(id)}"${draggable} style="border-left-color:${accent}">` +
     `${posBadge}<div class="avatar-col">${avatar}${dragHandle}</div><div class="card-main">${inner}</div></div>`;
 }
 
@@ -475,12 +507,10 @@ function matchPipHtml(match, index) {
     `<span class="match-popover" role="dialog" aria-label="Match ${index + 1} details">` +
     `<span class="popover-kicker">Match ${index + 1}</span>` +
     `<span class="popover-title">${esc(details.map)}</span>` +
-    `<span class="popover-main">` +
+    `<span class="popover-main compact-popover-main">` +
     `<span><strong class="${details.rrClass}">${esc(details.rr)}</strong><small>RR</small></span>` +
     `<span><strong class="${esc(details.resultClass)}">${esc(details.result)}</strong><small>Result</small></span>` +
-    `<span><strong>${esc(details.score)}</strong><small>Score</small></span>` +
     `</span>` +
-    `<span class="popover-row"><span>Agent</span><strong>${esc(details.agent)}</strong></span>` +
     `<span class="popover-row"><span>Rank then</span><strong>${esc(details.tier)}</strong></span>` +
     `<span class="popover-row"><span>Played</span><strong>${esc(details.when)}</strong></span>` +
     `</span></span>`;
@@ -510,8 +540,6 @@ function matchDetails(match, lastChange) {
     rrClass: rrChange >= 0 ? "win" : "loss",
     result: result.text,
     resultClass: result.className,
-    score: scoreText(match || {}),
-    agent: valueOrDash(readField(match, ["agent", "agentName", "character", "characterName", "player.agent", "player.character", "stats.agent"])),
     tier: valueOrDash(readField(match, ["tier", "rank", "rankThen", "currentTierPatched", "tierPatched", "metadata.tier"])),
     when: date ? timeAgo(date) : "—",
   };
@@ -644,6 +672,7 @@ async function onAdd(event) {
   accounts.push(account);
   await setAccounts(accounts);
   riotIdInput.value = "";
+  addForm.dataset.expanded = "";
   await render();
 
   const entry = await fetchAccountData(account);
@@ -709,11 +738,14 @@ function normalizePinnedOrder(accounts) {
 }
 
 function onPinnedDragStart(event) {
-  const handle = event.target.closest(".drag-handle");
-  if (!handle) return;
-
-  const card = handle.closest(".card.pinned");
+  const card = event.target.closest(".card.pinned");
   if (!card) return;
+
+  // The whole pinned card is draggable, but normal controls should not start a drag.
+  if (event.target.closest("button, input, select, textarea, a, .pip, .pip-wrap, .match-popover")) {
+    event.preventDefault();
+    return;
+  }
 
   draggedPinnedId = card.dataset.id;
   card.classList.add("dragging");
