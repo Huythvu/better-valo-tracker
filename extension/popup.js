@@ -342,9 +342,6 @@ function cardHtml(account, entry, position, settings) {
   const isPinned = Boolean(account.pinned);
   const pinBtn =
     `<button class="pin ${isPinned ? "active" : ""}" data-id="${esc(id)}" title="${isPinned ? "Unpin account" : "Pin account"}" type="button" aria-label="${isPinned ? "Unpin account" : "Pin account"}">${isPinned ? "★" : "☆"}</button>`;
-  const dragHandle = isPinned
-    ? `<button class="drag-handle" title="Drag to reorder pinned accounts" type="button" aria-label="Drag to reorder pinned accounts">⋮⋮</button>`
-    : "";
   const removeBtn =
     `<button class="remove" data-id="${esc(id)}" title="Remove" type="button">&times;</button>`;
   const riotId =
@@ -352,11 +349,11 @@ function cardHtml(account, entry, position, settings) {
 
   if (!entry) {
     return shell(account, pos, "#6b7a89", emptyAvatar(),
-      `<div class="card-top">${dragHandle}${pinBtn}${riotId}${removeBtn}</div><div class="card-msg">Not refreshed yet.</div>`);
+      `<div class="card-top">${pinBtn}${riotId}${removeBtn}</div><div class="card-msg">Not refreshed yet.</div>`);
   }
   if (entry.error) {
     return shell(account, pos, "#c0395a", emptyAvatar(),
-      `<div class="card-top">${dragHandle}${pinBtn}${riotId}${removeBtn}</div>` +
+      `<div class="card-top">${pinBtn}${riotId}${removeBtn}</div>` +
       `<div class="card-msg error">${esc(entry.error)}</div>`);
   }
 
@@ -374,7 +371,7 @@ function cardHtml(account, entry, position, settings) {
     ? `<div class="avatar" style="background-image:url('${esc(profile.cardUrl)}')"></div>`
     : emptyAvatar();
   const level = profile.level ? `<span class="level">Lvl ${profile.level}</span>` : "";
-  const top = `<div class="card-top">${dragHandle}${pinBtn}${riotId}${level}${removeBtn}</div>`;
+  const top = `<div class="card-top">${pinBtn}${riotId}${level}${removeBtn}</div>`;
 
   const rr = Number.isFinite(c.rr) ? c.rr : 0;
   const lastChange = Number.isFinite(c.lastChange) ? c.lastChange : 0;
@@ -385,8 +382,6 @@ function cardHtml(account, entry, position, settings) {
   const placements = c.inPlacements ? `<span class="badge">Placements</span>` : "";
   const rankName = c.tier || "Unrated";
   const rrText = c.inPlacements ? "Placements" : `${rr} RR`;
-  const latestComp = latestCompetitiveMatch(recent);
-  const rrHover = rrTooltipHtml(latestComp, rrText, lastChange);
 
   if (settings.compactMode) {
     const compactLastPlayed = settings.showLastPlayed
@@ -394,7 +389,7 @@ function cardHtml(account, entry, position, settings) {
       : "";
     return shell(account, pos, color, avatar,
       top +
-      `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${rrHover}</span>` +
+      `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${esc(rrText)}</span>` +
       `<span class="delta ${deltaCls}">${deltaText}</span></div>` +
       compactLastPlayed);
   }
@@ -408,11 +403,8 @@ function cardHtml(account, entry, position, settings) {
 
   const pips =
     recent
-      .map((m) => {
-        const details = matchDetails(m, 0);
-        return `<span class="pip ${esc(details.resultClass)}" title="${esc(details.map)} &middot; ${esc(details.tier)}">` +
-          `${esc(details.rr)}</span>`;
-      })
+      .slice(0, 5)
+      .map((m, index) => matchPipHtml(m, index))
       .join("") || `<span class="card-msg">No recent matches</span>`;
 
   const lastPlayedEl = settings.showLastPlayed
@@ -426,7 +418,7 @@ function cardHtml(account, entry, position, settings) {
     `<div class="rank-name">${esc(rankName)} ${placements}</div>` +
     `<div class="rr-bar"><span style="width:${rrPct}%;background:${color}"></span></div>` +
     `</div>` +
-    `<div class="rr-side"><div class="rr-val">${rrHover}</div>` +
+    `<div class="rr-side"><div class="rr-val">${esc(rrText)}</div>` +
     `<div class="delta ${deltaCls}">${deltaText}</div></div>` +
     `</div>` +
     `<div class="meta"><span>Peak <strong>${esc(d.peak?.tier || "—")}</strong></span>` +
@@ -444,8 +436,11 @@ function shell(account, posBadge, accent, avatar, inner) {
   const pinned = Boolean(account.pinned);
   const classes = pinned ? "card pinned" : "card";
   const draggable = pinned ? ' draggable="true"' : "";
+  const dragHandle = pinned
+    ? `<button class="drag-handle" title="Drag to reorder pinned accounts" type="button" aria-label="Drag to reorder pinned accounts"><span></span><span></span><span></span></button>`
+    : "";
   return `<div class="${classes}" data-id="${esc(id)}"${draggable} style="border-left-color:${accent}">` +
-    `${posBadge}${avatar}<div class="card-main">${inner}</div></div>`;
+    `${posBadge}<div class="avatar-col">${avatar}${dragHandle}</div><div class="card-main">${inner}</div></div>`;
 }
 
 function emptyAvatar() {
@@ -472,12 +467,14 @@ function latestCompetitiveMatch(recent) {
     .sort((a, b) => matchDateMs(b) - matchDateMs(a))[0] || null;
 }
 
-function rrTooltipHtml(match, rrText, lastChange) {
-  const details = matchDetails(match, lastChange);
+function matchPipHtml(match, index) {
+  const details = matchDetails(match, 0);
+  const label = details.rr === "0" ? "0" : details.rr;
 
-  return `<span class="rr-hover" tabindex="0" aria-label="Latest competitive match details">${esc(rrText)}` +
-    `<span class="rr-popover" role="dialog" aria-label="Latest competitive match">` +
-    `<span class="popover-kicker">Latest comp</span>` +
+  return `<span class="pip-wrap">` +
+    `<span class="pip ${esc(details.resultClass)}" tabindex="0" aria-label="Match ${index + 1} details">${esc(label)}</span>` +
+    `<span class="match-popover" role="dialog" aria-label="Match ${index + 1} details">` +
+    `<span class="popover-kicker">Match ${index + 1}</span>` +
     `<span class="popover-title">${esc(details.map)}</span>` +
     `<span class="popover-main">` +
     `<span><strong class="${details.rrClass}">${esc(details.rr)}</strong><small>RR</small></span>` +
@@ -489,7 +486,6 @@ function rrTooltipHtml(match, rrText, lastChange) {
     `<span class="popover-row"><span>Played</span><strong>${esc(details.when)}</strong></span>` +
     `</span></span>`;
 }
-
 function matchDetails(match, lastChange) {
   const rrValue = numberFrom(
     readField(match, [
@@ -714,6 +710,8 @@ function normalizePinnedOrder(accounts) {
 }
 
 function onPinnedDragStart(event) {
+  if (!event.target.closest(".drag-handle")) return;
+
   const card = event.target.closest(".card.pinned");
   if (!card) return;
 
