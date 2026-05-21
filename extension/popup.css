@@ -457,12 +457,6 @@ strong.loss {
   color: #ffb3ba;
 }
 
-.updated {
-  color: var(--muted);
-  text-align: center;
-  font-size: 11px;
-  margin-top: 8px;
-}
 
 
 /* --- Simple settings additions --- */

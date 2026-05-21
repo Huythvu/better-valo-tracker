@@ -40,7 +40,6 @@ const PANEL_HTML = `
     <p id="status" class="status" hidden></p>
     <div id="accounts"></div>
     <p id="empty" class="empty">No accounts tracked yet. Add a Riot ID above.</p>
-    <p id="updated" class="updated"></p>
   </section>
 
   <section id="view-settings" class="view" hidden>
@@ -82,7 +81,6 @@ let lastManualRefreshAt = 0;
 let accountsEl;
 let emptyEl;
 let statusEl;
-let updatedEl;
 let refreshBtn;
 let addForm;
 let riotIdInput;
@@ -102,7 +100,6 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   accountsEl = root.getElementById("accounts");
   emptyEl = root.getElementById("empty");
   statusEl = root.getElementById("status");
-  updatedEl = root.getElementById("updated");
   refreshBtn = root.getElementById("refresh");
   addForm = root.getElementById("add-form");
   riotIdInput = root.getElementById("riot-id");
@@ -220,7 +217,7 @@ async function mergeCache(id, entry) {
 
 async function render() {
   const accounts = await getAccounts();
-  const { cache, lastRefresh } = await getState();
+  const { cache } = await getState();
   const settings = await getSettings();
 
   emptyEl.hidden = accounts.length > 0;
@@ -237,7 +234,6 @@ async function render() {
     .map(({ account, entry }) => cardHtml(account, entry, entry?.data ? ++position : 0, settings))
     .join("");
 
-  updatedEl.textContent = lastRefresh ? `Updated ${timeAgo(lastRefresh)}` : "";
 }
 
 function eloOf(entry) {
@@ -258,10 +254,9 @@ function cardHtml(account, entry, position, settings) {
       `<div class="card-top">${riotId}${removeBtn}</div><div class="card-msg">Not refreshed yet.</div>`);
   }
   if (entry.error) {
-    const updated = entry.fetchedAt ? `<div class="card-msg">Updated ${timeAgo(entry.fetchedAt)}</div>` : "";
     return shell(pos, "#c0395a", emptyAvatar(),
       `<div class="card-top">${riotId}${removeBtn}</div>` +
-      `<div class="card-msg error">${esc(entry.error)}</div>${updated}`);
+      `<div class="card-msg error">${esc(entry.error)}</div>`);
   }
 
   const d = entry.data || {};
@@ -289,8 +284,6 @@ function cardHtml(account, entry, position, settings) {
   const placements = c.inPlacements ? `<span class="badge">Placements</span>` : "";
   const rankName = c.tier || "Unrated";
   const rrText = c.inPlacements ? "Placements" : `${rr} RR`;
-  const updatedEl = entry.fetchedAt ? `<span>Updated <strong>${timeAgo(entry.fetchedAt)}</strong></span>` : "";
-
   if (settings.compactMode) {
     const compactLastPlayed = settings.showLastPlayed
       ? `<div class="last-played compact-last">${esc(lastCompPlayedText(recent))}</div>`
@@ -299,8 +292,7 @@ function cardHtml(account, entry, position, settings) {
       top +
       `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${esc(rrText)}</span>` +
       `<span class="delta ${deltaCls}">${deltaText}</span></div>` +
-      compactLastPlayed +
-      `<div class="meta">${updatedEl}</div>`);
+      compactLastPlayed);
   }
 
   const session = sessionSummary(recent);
@@ -335,7 +327,7 @@ function cardHtml(account, entry, position, settings) {
     `</div>` +
     `<div class="meta"><span>Peak <strong>${esc(d.peak?.tier || "—")}</strong></span>` +
     `<span>Act ${d.act && d.act.games > 0 ? `${d.act.wins}W ${d.act.losses}L` : "&mdash;"}</span>` +
-    `${updatedEl}</div>` +
+    `</div>` +
     lastPlayedEl +
     sessionEl +
     `<div class="recent">${pips}</div>`;
