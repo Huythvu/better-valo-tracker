@@ -441,7 +441,7 @@ h1::before {
   left: 50%;
   bottom: calc(100% + 10px);
   z-index: 90;
-  width: 218px;
+  width: 238px;
   pointer-events: none;
   background: linear-gradient(145deg, rgba(26, 36, 47, 0.98), rgba(12, 20, 28, 0.98));
   border: 1px solid rgba(255, 70, 85, 0.26);
@@ -503,6 +503,27 @@ h1::before {
   margin-bottom: 9px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.popover-subtitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  margin: -5px 0 10px;
+}
+
+.popover-subtitle strong {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.popover-subtitle span {
+  color: var(--text);
+  font-weight: 800;
   white-space: nowrap;
 }
 

@@ -501,16 +501,21 @@ function latestCompetitiveMatch(recent) {
 function matchPipHtml(match, index) {
   const details = matchDetails(match, 0);
   const label = details.rr === "0" ? "0" : details.rr;
+  const scorePart = details.score !== "—" ? ` ${esc(details.score)}` : "";
 
   return `<span class="pip-wrap">` +
     `<span class="pip ${esc(details.resultClass)}" tabindex="0" aria-label="Match ${index + 1} details">${esc(label)}</span>` +
     `<span class="match-popover" role="dialog" aria-label="Match ${index + 1} details">` +
     `<span class="popover-kicker">Match ${index + 1}</span>` +
     `<span class="popover-title">${esc(details.map)}</span>` +
-    `<span class="popover-main compact-popover-main">` +
-    `<span><strong class="${details.rrClass}">${esc(details.rr)}</strong><small>RR</small></span>` +
-    `<span><strong class="${esc(details.resultClass)}">${esc(details.result)}</strong><small>Result</small></span>` +
+    `<span class="popover-subtitle"><strong class="${esc(details.resultClass)}">${esc(details.result)}${scorePart}</strong><span>${esc(details.rr)} RR</span></span>` +
+    `<span class="popover-main">` +
+    `<span><strong class="${esc(details.rrClass)}">${esc(details.rr)}</strong><small>RR</small></span>` +
+    `<span><strong>${esc(details.agent)}</strong><small>Agent</small></span>` +
+    `<span><strong>${esc(details.kda)}</strong><small>K / D / A</small></span>` +
     `</span>` +
+    `<span class="popover-row"><span>ACS</span><strong>${esc(details.acs)}</strong></span>` +
+    `<span class="popover-row"><span>HS</span><strong>${esc(details.hs)}</strong></span>` +
     `<span class="popover-row"><span>Rank then</span><strong>${esc(details.tier)}</strong></span>` +
     `<span class="popover-row"><span>Played</span><strong>${esc(details.when)}</strong></span>` +
     `</span></span>`;
@@ -533,6 +538,9 @@ function matchDetails(match, lastChange) {
   const rrChange = Number.isFinite(rrValue) ? rrValue : Number(lastChange || 0);
   const result = resultLabel(match || {}, rrChange);
   const date = matchDate(match);
+  const kills = numberOrNull(readField(match, ["kills", "stats.kills", "player.kills", "player.stats.kills", "performance.kills"]));
+  const deaths = numberOrNull(readField(match, ["deaths", "stats.deaths", "player.deaths", "player.stats.deaths", "performance.deaths"]));
+  const assists = numberOrNull(readField(match, ["assists", "stats.assists", "player.assists", "player.stats.assists", "performance.assists"]));
 
   return {
     map: valueOrDash(readField(match, ["map", "mapName", "map.name", "metadata.map", "metadata.mapName", "meta.map", "match.map"])),
@@ -540,6 +548,11 @@ function matchDetails(match, lastChange) {
     rrClass: rrChange >= 0 ? "win" : "loss",
     result: result.text,
     resultClass: result.className,
+    score: scoreText(match),
+    agent: valueOrDash(readField(match, ["agent", "agent.name", "character", "characterName", "character.name", "player.agent", "player.agent.name", "player.character", "player.character.name"])),
+    kda: kdaText(kills, deaths, assists),
+    acs: valueOrDash(readField(match, ["acs", "averageCombatScore", "average_combat_score", "combatScore", "combat_score", "stats.acs", "stats.averageCombatScore", "stats.combatScore", "player.stats.acs", "player.stats.averageCombatScore"])),
+    hs: percentText(readField(match, ["hs", "hsPercent", "hs_percentage", "headshotPercent", "headshot_percentage", "headshot_percentage_display", "stats.hs", "stats.hsPercent", "stats.headshotPercent", "stats.headshot_percentage", "player.stats.headshotPercent"])),
     tier: valueOrDash(readField(match, ["tier", "rank", "rankThen", "currentTierPatched", "tierPatched", "metadata.tier"])),
     when: date ? timeAgo(date) : "—",
   };
@@ -561,14 +574,44 @@ function resultLabel(match, rrChange = Number(match.rrChange || 0)) {
 }
 
 function scoreText(match) {
-  const direct = readField(match, ["score", "rounds", "matchScore", "metadata.score"]);
-  if (direct) return String(direct);
+  const direct = readField(match, ["score", "scoreText", "roundScore", "round_score", "matchScore", "metadata.score"]);
+  if (direct) return normalizeScore(direct);
 
-  const won = readField(match, ["roundsWon", "teamRoundsWon", "round_won", "rounds.won", "teams.red.roundsWon", "team.roundsWon"]);
-  const lost = readField(match, ["roundsLost", "enemyRoundsWon", "round_lost", "rounds.lost", "teams.blue.roundsWon", "enemy.roundsWon"]);
-  if (won !== undefined && lost !== undefined) return `${won}-${lost}`;
+  const won = readField(match, ["roundsWon", "rounds_won", "teamRoundsWon", "team_rounds_won", "round_won", "rounds.won", "roundsWonLost.won", "team.roundsWon", "team.rounds.won"]);
+  const lost = readField(match, ["roundsLost", "rounds_lost", "enemyRoundsWon", "enemy_rounds_won", "round_lost", "rounds.lost", "roundsWonLost.lost", "enemy.roundsWon", "enemy.rounds.won"]);
+  if (won !== undefined && lost !== undefined) return `${won}–${lost}`;
 
   return "—";
+}
+
+function normalizeScore(value) {
+  if (Array.isArray(value) && value.length >= 2) return `${value[0]}–${value[1]}`;
+  if (typeof value === "object" && value !== null) {
+    const won = readField(value, ["won", "roundsWon", "rounds_won", "team", "blue", "red"]);
+    const lost = readField(value, ["lost", "roundsLost", "rounds_lost", "enemy", "opponent"]);
+    if (won !== undefined && lost !== undefined) return `${won}–${lost}`;
+  }
+  return String(value).replace(/\s*-\s*/g, "–");
+}
+
+function kdaText(kills, deaths, assists) {
+  if (kills === null && deaths === null && assists === null) return "—";
+  return `${kills ?? "—"} / ${deaths ?? "—"} / ${assists ?? "—"}`;
+}
+
+function percentText(value) {
+  if (value === undefined || value === null || value === "") return "—";
+  const raw = String(value).trim();
+  if (raw.endsWith("%")) return raw;
+  const number = Number(raw);
+  if (!Number.isFinite(number)) return raw;
+  const percent = number > 0 && number <= 1 ? number * 100 : number;
+  return `${Math.round(percent)}%`;
+}
+
+function numberOrNull(value) {
+  const number = numberFrom(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function matchDate(match) {
