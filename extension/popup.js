@@ -71,6 +71,8 @@ const PANEL_HTML = `
 
     <p class="setting-hint">Panel closed = no automatic refresh. Manual refresh has a short cooldown.</p>
   </section>
+
+  <div class="scroll-affordance" aria-hidden="true"><span>Scroll for more</span></div>
 </div>`;
 
 let panelRoot = null;
@@ -92,6 +94,7 @@ let refreshModeSelect;
 let showLastPlayedInput;
 let compactModeInput;
 let tabButtons;
+let panelEl;
 
 // Called by content.js once the shadow root is created.
 self.bvtMountPanel = function bvtMountPanel(root) {
@@ -111,6 +114,7 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   showLastPlayedInput = root.getElementById("show-last-played");
   compactModeInput = root.getElementById("compact-mode");
   tabButtons = root.querySelectorAll(".tab");
+  panelEl = root.querySelector(".bvt-panel");
 
   // Expose panel-open refresh to content.js. This is intentionally not a
   // background refresh; it only runs when the user opens the panel.
@@ -157,6 +161,21 @@ async function init() {
       loadSettings().then(render);
     }
   });
+
+  panelEl.addEventListener("scroll", updateScrollAffordance, { passive: true });
+  updateScrollAffordance();
+}
+
+function updateScrollAffordance() {
+  if (!panelEl) return;
+
+  const canScroll = panelEl.scrollHeight > panelEl.clientHeight + 2;
+  const atTop = panelEl.scrollTop <= 2;
+  const atBottom = panelEl.scrollTop + panelEl.clientHeight >= panelEl.scrollHeight - 2;
+
+  panelEl.classList.toggle("can-scroll", canScroll);
+  panelEl.classList.toggle("at-top", !canScroll || atTop);
+  panelEl.classList.toggle("at-bottom", !canScroll || atBottom);
 }
 
 // --- Tabs + settings --------------------------------------------------------
@@ -230,14 +249,24 @@ async function render() {
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
 
   const rows = sortedAccountRows(accounts, cache);
+  const rankPositions = rankPositionsById(accounts, cache);
 
-  let position = 0;
   animateCards(() => {
     accountsEl.innerHTML = rows
-      .map(({ account, entry }) => cardHtml(account, entry, entry?.data ? ++position : 0, settings))
+      .map(({ account, entry }) => cardHtml(account, entry, rankPositions.get(accountId(account)) || 0, settings))
       .join("");
   });
 
+  requestAnimationFrame(updateScrollAffordance);
+}
+
+function rankPositionsById(accounts, cache) {
+  const ranked = accounts
+    .map((account) => ({ account, entry: cache[accountId(account)] || null }))
+    .filter(({ entry }) => entry?.data)
+    .sort((a, b) => eloOf(b.entry) - eloOf(a.entry));
+
+  return new Map(ranked.map(({ account }, index) => [accountId(account), index + 1]));
 }
 
 function sortedAccountRows(accounts, cache) {
@@ -356,13 +385,16 @@ function cardHtml(account, entry, position, settings) {
   const placements = c.inPlacements ? `<span class="badge">Placements</span>` : "";
   const rankName = c.tier || "Unrated";
   const rrText = c.inPlacements ? "Placements" : `${rr} RR`;
+  const latestComp = latestCompetitiveMatch(recent);
+  const rrHover = rrTooltipHtml(latestComp, rrText, lastChange);
+
   if (settings.compactMode) {
     const compactLastPlayed = settings.showLastPlayed
       ? `<div class="last-played compact-last">${esc(lastCompPlayedText(recent))}</div>`
       : "";
     return shell(account, pos, color, avatar,
       top +
-      `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${esc(rrText)}</span>` +
+      `<div class="compact-rank">${iconEl}<span>${esc(rankName)} &middot; ${rrHover}</span>` +
       `<span class="delta ${deltaCls}">${deltaText}</span></div>` +
       compactLastPlayed);
   }
@@ -394,7 +426,7 @@ function cardHtml(account, entry, position, settings) {
     `<div class="rank-name">${esc(rankName)} ${placements}</div>` +
     `<div class="rr-bar"><span style="width:${rrPct}%;background:${color}"></span></div>` +
     `</div>` +
-    `<div class="rr-side"><div class="rr-val">${esc(rrText)}</div>` +
+    `<div class="rr-side"><div class="rr-val">${rrHover}</div>` +
     `<div class="delta ${deltaCls}">${deltaText}</div></div>` +
     `</div>` +
     `<div class="meta"><span>Peak <strong>${esc(d.peak?.tier || "—")}</strong></span>` +
@@ -418,6 +450,69 @@ function shell(account, posBadge, accent, avatar, inner) {
 
 function emptyAvatar() {
   return `<div class="avatar"></div>`;
+}
+
+function latestCompetitiveMatch(recent) {
+  return recent
+    .filter((m) => m && m.date && isCompetitiveMatch(m))
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0] || null;
+}
+
+function rrTooltipHtml(match, rrText, lastChange) {
+  const rrChange = match && Number.isFinite(Number(match.rrChange))
+    ? Number(match.rrChange)
+    : Number(lastChange || 0);
+
+  const fallback = {
+    map: "No recent comp map found",
+    rrChange,
+    result: rrChange > 0 ? "win" : rrChange < 0 ? "loss" : "draw",
+  };
+  const m = match || fallback;
+  const result = resultLabel(m);
+  const score = scoreText(m);
+  const agent = valueOrDash(m.agent || m.character || m.agentName);
+  const map = valueOrDash(m.map || m.mapName);
+  const when = m.date ? timeAgo(m.date) : "—";
+  const tier = valueOrDash(m.tier || m.rank || m.currentTierPatched);
+
+  return `<span class="rr-hover" tabindex="0">${esc(rrText)}` +
+    `<span class="rr-tooltip" role="tooltip">` +
+    `<span class="tooltip-map">${esc(map)}</span>` +
+    `<span class="tooltip-row"><span>RR</span><strong class="${rrChange >= 0 ? "win" : "loss"}">${esc(signed(rrChange))}</strong></span>` +
+    `<span class="tooltip-row"><span>Result</span><strong class="${esc(result.className)}">${esc(result.text)}</strong></span>` +
+    `<span class="tooltip-row"><span>Score</span><strong>${esc(score)}</strong></span>` +
+    `<span class="tooltip-row"><span>Agent</span><strong>${esc(agent)}</strong></span>` +
+    `<span class="tooltip-row"><span>Rank then</span><strong>${esc(tier)}</strong></span>` +
+    `<span class="tooltip-row"><span>Played</span><strong>${esc(when)}</strong></span>` +
+    `</span></span>`;
+}
+
+function resultLabel(match) {
+  const raw = String(match.result || match.outcome || "").toLowerCase();
+  if (raw.includes("win") || raw === "won") return { text: "Win", className: "win" };
+  if (raw.includes("loss") || raw.includes("lose") || raw === "lost") return { text: "Loss", className: "loss" };
+  if (raw.includes("draw") || raw.includes("tie")) return { text: "Draw", className: "draw" };
+
+  const rr = Number(match.rrChange || 0);
+  if (rr > 0) return { text: "Win", className: "win" };
+  if (rr < 0) return { text: "Loss", className: "loss" };
+  return { text: "Unknown", className: "draw" };
+}
+
+function scoreText(match) {
+  const direct = match.score || match.rounds || match.matchScore;
+  if (direct) return direct;
+
+  const won = match.roundsWon ?? match.teamRoundsWon ?? match.round_won;
+  const lost = match.roundsLost ?? match.enemyRoundsWon ?? match.round_lost;
+  if (won !== undefined && lost !== undefined) return `${won}-${lost}`;
+
+  return "—";
+}
+
+function valueOrDash(value) {
+  return value === undefined || value === null || value === "" ? "—" : String(value);
 }
 
 function sessionSummary(recent) {
