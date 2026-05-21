@@ -6,6 +6,9 @@ const REFRESH_ALARM = "bvt-refresh";
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.alarms.create(REFRESH_ALARM, { periodInMinutes: 5 });
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {

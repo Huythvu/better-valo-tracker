@@ -4,13 +4,15 @@
   "version": "1.0.0",
   "description": "Track Valorant rank, RR, peak, and recent matches across your grind accounts.",
   "action": {
-    "default_popup": "popup.html",
     "default_title": "Better Valo Tracker"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["storage", "alarms"],
+  "permissions": ["storage", "alarms", "sidePanel"],
   "host_permissions": ["https://*.workers.dev/*", "https://valorant-api.com/*"],
   "icons": {
     "16": "icons/icon16.png",

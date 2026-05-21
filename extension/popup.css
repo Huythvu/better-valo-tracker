@@ -17,9 +17,8 @@
 }
 
 body {
-  width: 380px;
-  max-height: 600px;
-  overflow-y: auto;
+  width: 100%;
+  min-width: 300px;
   background: var(--bg);
   color: var(--text);
   font-family: "Segoe UI", Tahoma, sans-serif;

@@ -26,6 +26,14 @@ async function init() {
     render();
   });
   refreshStale();
+
+  // The side panel stays open, so re-render when a background refresh or
+  // another panel instance updates stored data.
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if ((area === "local" && changes.cache) || (area === "sync" && changes.accounts)) {
+      render();
+    }
+  });
 }
 
 // --- Storage ----------------------------------------------------------------
