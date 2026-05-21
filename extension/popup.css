@@ -1,0 +1,279 @@
+:root {
+  --bg: #0f1923;
+  --panel: #1a242f;
+  --panel-2: #21303c;
+  --line: #2b3a47;
+  --text: #ece8e1;
+  --muted: #8b9bac;
+  --red: #ff4655;
+  --green: #2ec971;
+  --gray: #6b7a89;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  width: 360px;
+  max-height: 580px;
+  overflow-y: auto;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, sans-serif;
+  font-size: 13px;
+  padding: 12px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+h1 {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+#refresh {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+#refresh:hover {
+  border-color: var(--red);
+}
+
+#refresh.spinning {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#add-form {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+#riot-id {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 9px;
+}
+
+#riot-id:focus {
+  outline: none;
+  border-color: var(--red);
+}
+
+#region {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 7px 4px;
+}
+
+#add-form button {
+  background: var(--red);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+#add-form button:hover {
+  filter: brightness(1.1);
+}
+
+.status {
+  background: rgba(255, 70, 85, 0.12);
+  border: 1px solid var(--red);
+  border-radius: 6px;
+  color: #ffb3ba;
+  padding: 6px 9px;
+  margin-bottom: 10px;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 20px 8px;
+}
+
+.card {
+  display: flex;
+  gap: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.card-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.riot-id {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.riot-id .tag {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.remove:hover {
+  color: var(--red);
+}
+
+.rank-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.rank {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rr {
+  color: var(--muted);
+}
+
+.delta {
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.delta.win {
+  color: var(--green);
+}
+
+.delta.loss {
+  color: var(--red);
+}
+
+.delta.draw {
+  color: var(--gray);
+}
+
+.badge {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+}
+
+.meta {
+  display: flex;
+  gap: 12px;
+  color: var(--muted);
+  margin-top: 5px;
+  font-size: 12px;
+}
+
+.recent {
+  display: flex;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.pip {
+  flex: 1;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 3px 0;
+}
+
+.pip.win {
+  background: rgba(46, 201, 113, 0.16);
+  color: var(--green);
+}
+
+.pip.loss {
+  background: rgba(255, 70, 85, 0.16);
+  color: var(--red);
+}
+
+.pip.draw {
+  background: rgba(107, 122, 137, 0.18);
+  color: var(--gray);
+}
+
+.card-msg {
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.card-msg.error {
+  color: #ffb3ba;
+}
+
+.updated {
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+  margin-top: 6px;
+}

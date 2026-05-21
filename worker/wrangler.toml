@@ -1,0 +1,9 @@
+name = "better-valo-tracker"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+
+# The HenrikDev API key is NOT stored here. Set it as an encrypted secret:
+#   npx wrangler secret put HENRIKDEV_API_KEY
+#
+# Response caching uses the Cloudflare Cache API (caches.default), which has
+# no write quota â€” so no KV namespace binding is required.

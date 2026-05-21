@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Better Valo Tracker</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Better Valo Tracker</h1>
+      <button id="refresh" type="button" title="Refresh all">&#8635;</button>
+    </header>
+
+    <form id="add-form" autocomplete="off">
+      <input
+        id="riot-id"
+        type="text"
+        placeholder="name#tag"
+        aria-label="Riot ID"
+        spellcheck="false"
+      />
+      <select id="region" aria-label="Region">
+        <option value="eu">EU</option>
+        <option value="na">NA</option>
+        <option value="ap">AP</option>
+        <option value="kr">KR</option>
+        <option value="latam">LATAM</option>
+        <option value="br">BR</option>
+      </select>
+      <button type="submit">Add</button>
+    </form>
+
+    <p id="status" class="status" hidden></p>
+    <div id="accounts"></div>
+    <p id="empty" class="empty">No accounts tracked yet. Add a Riot ID above.</p>
+    <p id="updated" class="updated"></p>
+
+    <script src="config.js"></script>
+    <script src="api.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
