@@ -177,7 +177,11 @@ async function init() {
   });
 
   panelEl.addEventListener("scroll", updateScrollAffordance, { passive: true });
-  updateScrollAffordance();
+  scheduleScrollAffordanceUpdate();
+}
+
+function scheduleScrollAffordanceUpdate() {
+  requestAnimationFrame(() => requestAnimationFrame(updateScrollAffordance));
 }
 
 function updateScrollAffordance() {
@@ -198,8 +202,14 @@ function switchView(name) {
   tabButtons.forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === name);
   });
+
   panelRoot.getElementById("view-accounts").hidden = name !== "accounts";
   panelRoot.getElementById("view-settings").hidden = name !== "settings";
+  panelEl.dataset.view = name;
+
+  // Hidden views change the panel height after layout has settled, so update
+  // the scroll affordance after the browser applies the tab switch.
+  scheduleScrollAffordanceUpdate();
 }
 
 async function getSettings() {
@@ -279,7 +289,7 @@ async function render() {
       .join("");
   });
 
-  requestAnimationFrame(updateScrollAffordance);
+  scheduleScrollAffordanceUpdate();
 }
 
 function rankPositionsById(accounts, cache) {
