@@ -97,6 +97,29 @@ function togglePanel() {
   else openPanel();
 }
 
+async function shouldCloseOnOutsideClick() {
+  const { settings } = await chrome.storage.sync.get("settings");
+  return !settings || settings.closeOnOutsideClick !== false;
+}
+
+function isInsidePanel(event) {
+  if (!host) return false;
+  const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+  return path.includes(host);
+}
+
+document.addEventListener(
+  "pointerdown",
+  (event) => {
+    if (!isOpen || !host || isInsidePanel(event)) return;
+
+    shouldCloseOnOutsideClick().then((enabled) => {
+      if (enabled && isOpen) closePanel();
+    });
+  },
+  true
+);
+
 chrome.runtime.onMessage.addListener((message) => {
   if (message && message.type === "bvt-toggle") togglePanel();
 });

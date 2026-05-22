@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   showLastPlayed: true,
   compactMode: false,
   hideAddForm: false,
+  closeOnOutsideClick: true,
 };
 
 const REFRESH_COOLDOWN_MS = 30 * 1000;
@@ -67,6 +68,11 @@ const PANEL_HTML = `
       <input id="hide-add-form" type="checkbox" />
     </label>
 
+    <label class="setting checkbox-setting">
+      <span>Close when clicking outside panel</span>
+      <input id="close-on-outside-click" type="checkbox" />
+    </label>
+
     <div class="setting">
       <label for="panel-side">Panel side</label>
       <select id="panel-side">
@@ -100,6 +106,7 @@ let refreshModeSelect;
 let showLastPlayedInput;
 let compactModeInput;
 let hideAddFormInput;
+let closeOnOutsideClickInput;
 let tabButtons;
 let panelEl;
 
@@ -121,6 +128,7 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   showLastPlayedInput = root.getElementById("show-last-played");
   compactModeInput = root.getElementById("compact-mode");
   hideAddFormInput = root.getElementById("hide-add-form");
+  closeOnOutsideClickInput = root.getElementById("close-on-outside-click");
   tabButtons = root.querySelectorAll(".tab");
   panelEl = root.querySelector(".bvt-panel");
 
@@ -154,6 +162,7 @@ async function init() {
   showLastPlayedInput.addEventListener("change", saveSettings);
   compactModeInput.addEventListener("change", saveSettings);
   hideAddFormInput.addEventListener("change", saveSettings);
+  closeOnOutsideClickInput.addEventListener("change", saveSettings);
 
   loadRankAssets().then((assets) => {
     rankAssets = assets;
@@ -209,6 +218,7 @@ async function loadSettings() {
   showLastPlayedInput.checked = Boolean(settings.showLastPlayed);
   compactModeInput.checked = Boolean(settings.compactMode);
   hideAddFormInput.checked = Boolean(settings.hideAddForm);
+  closeOnOutsideClickInput.checked = settings.closeOnOutsideClick !== false;
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
   return settings;
 }
@@ -220,6 +230,7 @@ async function saveSettings() {
     showLastPlayed: showLastPlayedInput.checked,
     compactMode: compactModeInput.checked,
     hideAddForm: hideAddFormInput.checked,
+    closeOnOutsideClick: closeOnOutsideClickInput.checked,
   };
   await chrome.storage.sync.set({ settings });
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", settings.compactMode);
