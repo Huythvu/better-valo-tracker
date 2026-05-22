@@ -135,7 +135,6 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   // Expose panel-open refresh to content.js. This is intentionally not a
   // background refresh; it only runs when the user opens the panel.
   self.bvtHandlePanelOpen = refreshOnOpen;
-  self.bvtRefreshAll = refreshAll;
 
   init();
 };
@@ -234,8 +233,7 @@ async function saveSettings() {
   await render();
 }
 
-function updateAddFormVisibility(_accounts, settings) {
-  // Simple manual show/hide toggle for the original add-account form.
+function updateAddFormVisibility(settings) {
   addForm.hidden = Boolean(settings.hideAddForm);
 }
 
@@ -250,9 +248,8 @@ function setAccounts(list) {
 }
 
 function getState() {
-  return chrome.storage.local.get(["cache", "lastRefresh"]).then((r) => ({
+  return chrome.storage.local.get("cache").then((r) => ({
     cache: r.cache || {},
-    lastRefresh: r.lastRefresh || 0,
   }));
 }
 
@@ -271,7 +268,7 @@ async function render() {
 
   emptyEl.hidden = accounts.length > 0;
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
-  updateAddFormVisibility(accounts, settings);
+  updateAddFormVisibility(settings);
 
   const rows = sortedAccountRows(accounts, cache);
   const rankPositions = rankPositionsById(accounts, cache);
@@ -485,14 +482,8 @@ function recentMatchesOf(data) {
   return list.filter(Boolean);
 }
 
-function latestCompetitiveMatch(recent) {
-  return recent
-    .filter((m) => m && isCompetitiveMatch(m))
-    .sort((a, b) => matchDateMs(b) - matchDateMs(a))[0] || null;
-}
-
 function matchPipHtml(match, index) {
-  const details = matchDetails(match, 0);
+  const details = matchDetails(match);
   const label = details.rr === "0" ? "0" : details.rr;
   const scorePart = details.score !== "—" ? ` ${esc(details.score)}` : "";
 
@@ -513,51 +504,39 @@ function matchPipHtml(match, index) {
     `<span class="popover-row"><span>Played</span><strong>${esc(details.when)}</strong></span>` +
     `</span></span>`;
 }
-function matchDetails(match, lastChange) {
-  const rrValue = numberFrom(
-    readField(match, [
-      "rrChange",
-      "rr_change",
-      "mmrChange",
-      "mmr_change",
-      "mmr_change_to_last_game",
-      "eloChange",
-      "elo_change",
-      "ratingChange",
-      "rating_change",
-      "change",
-    ]),
-  );
-  const rrChange = Number.isFinite(rrValue) ? rrValue : Number(lastChange || 0);
+function matchDetails(match) {
+  const rrValue = numberFrom(readField(match, ["rrChange", "rr_change", "mmr_change_to_last_game"]));
+  const rrChange = Number.isFinite(rrValue) ? rrValue : 0;
   const result = resultLabel(match || {}, rrChange);
   const date = matchDate(match);
-  const kills = numberOrNull(readField(match, ["kills", "stats.kills", "player.kills", "player.stats.kills", "performance.kills"]));
-  const deaths = numberOrNull(readField(match, ["deaths", "stats.deaths", "player.deaths", "player.stats.deaths", "performance.deaths"]));
-  const assists = numberOrNull(readField(match, ["assists", "stats.assists", "player.assists", "player.stats.assists", "performance.assists"]));
+  const kills = numberOrNull(readField(match, ["kills", "stats.kills"]));
+  const deaths = numberOrNull(readField(match, ["deaths", "stats.deaths"]));
+  const assists = numberOrNull(readField(match, ["assists", "stats.assists"]));
 
   return {
-    map: valueOrDash(readField(match, ["map", "mapName", "map.name", "metadata.map", "metadata.mapName", "meta.map", "match.map"])),
+    map: valueOrDash(readField(match, ["map", "mapName", "metadata.map"])),
+    rrNumber: rrChange,
     rr: signed(rrChange),
     rrClass: rrChange >= 0 ? "win" : "loss",
     result: result.text,
     resultClass: result.className,
     score: scoreText(match),
-    agent: valueOrDash(readField(match, ["agent", "agent.name", "character", "characterName", "character.name", "player.agent", "player.agent.name", "player.character", "player.character.name"])),
+    agent: valueOrDash(readField(match, ["agent", "agent.name"])),
     kda: kdaText(kills, deaths, assists),
-    acs: valueOrDash(readField(match, ["acs", "averageCombatScore", "average_combat_score", "combatScore", "combat_score", "stats.acs", "stats.averageCombatScore", "stats.combatScore", "player.stats.acs", "player.stats.averageCombatScore"])),
-    hs: percentText(readField(match, ["hsPct", "hs_pct", "headshotPct", "headshot_pct", "hs", "hsPercent", "hs_percentage", "headshotPercent", "headshot_percentage", "headshot_percentage_display", "stats.hsPct", "stats.hs_pct", "stats.headshotPct", "stats.headshot_pct", "stats.hs", "stats.hsPercent", "stats.headshotPercent", "stats.headshot_percentage", "player.stats.hsPct", "player.stats.hs_pct", "player.stats.headshotPercent"])),
-    tier: valueOrDash(readField(match, ["tier", "rank", "rankThen", "currentTierPatched", "tierPatched", "metadata.tier"])),
+    acs: valueOrDash(readField(match, ["acs", "stats.acs"])),
+    hs: percentText(readField(match, ["hsPct", "stats.hsPct"])),
+    tier: valueOrDash(readField(match, ["tier", "rank", "rankThen", "currentTierPatched"])),
     when: date ? timeAgo(date) : "—",
   };
 }
 
 function resultLabel(match, rrChange = Number(match.rrChange || 0)) {
-  const raw = String(readField(match, ["result", "outcome", "matchResult", "status"]) || "").toLowerCase();
+  const raw = String(readField(match, ["result", "outcome"]) || "").toLowerCase();
   if (raw.includes("win") || raw === "won" || raw === "victory") return { text: "Win", className: "win" };
   if (raw.includes("loss") || raw.includes("lose") || raw === "lost" || raw === "defeat") return { text: "Loss", className: "loss" };
   if (raw.includes("draw") || raw.includes("tie")) return { text: "Draw", className: "draw" };
 
-  const won = readField(match, ["won", "hasWon", "victory"]);
+  const won = readField(match, ["won", "victory"]);
   if (won === true) return { text: "Win", className: "win" };
   if (won === false) return { text: "Loss", className: "loss" };
 
@@ -567,11 +546,11 @@ function resultLabel(match, rrChange = Number(match.rrChange || 0)) {
 }
 
 function scoreText(match) {
-  const direct = readField(match, ["score", "scoreText", "roundScore", "round_score", "matchScore", "metadata.score"]);
+  const direct = readField(match, ["score", "scoreText"]);
   if (direct) return normalizeScore(direct);
 
-  const won = readField(match, ["roundsWon", "rounds_won", "teamRoundsWon", "team_rounds_won", "round_won", "rounds.won", "roundsWonLost.won", "team.roundsWon", "team.rounds.won"]);
-  const lost = readField(match, ["roundsLost", "rounds_lost", "enemyRoundsWon", "enemy_rounds_won", "round_lost", "rounds.lost", "roundsWonLost.lost", "enemy.roundsWon", "enemy.rounds.won"]);
+  const won = readField(match, ["roundsWon", "rounds_won"]);
+  const lost = readField(match, ["roundsLost", "rounds_lost"]);
   if (won !== undefined && lost !== undefined) return `${won}–${lost}`;
 
   return "—";
@@ -580,8 +559,8 @@ function scoreText(match) {
 function normalizeScore(value) {
   if (Array.isArray(value) && value.length >= 2) return `${value[0]}–${value[1]}`;
   if (typeof value === "object" && value !== null) {
-    const won = readField(value, ["won", "roundsWon", "rounds_won", "team", "blue", "red"]);
-    const lost = readField(value, ["lost", "roundsLost", "rounds_lost", "enemy", "opponent"]);
+    const won = readField(value, ["won", "roundsWon", "rounds_won"]);
+    const lost = readField(value, ["lost", "roundsLost", "rounds_lost"]);
     if (won !== undefined && lost !== undefined) return `${won}–${lost}`;
   }
   return String(value).replace(/\s*-\s*/g, "–");
@@ -608,17 +587,7 @@ function numberOrNull(value) {
 }
 
 function matchDate(match) {
-  return readField(match, [
-    "date",
-    "playedAt",
-    "startedAt",
-    "startTime",
-    "gameStart",
-    "game_start",
-    "metadata.game_start",
-    "metadata.startedAt",
-    "meta.started_at",
-  ]);
+  return readField(match, ["date", "playedAt", "startedAt", "metadata.startedAt"]);
 }
 
 function matchDateMs(match) {
@@ -656,7 +625,7 @@ function sessionSummary(recent) {
   const games = recent.filter((m) => matchDate(m) && new Date(matchDate(m)).toDateString() === today);
   if (games.length === 0) return null;
   return {
-    rr: games.reduce((sum, m) => sum + Number(matchDetails(m, 0).rr || 0), 0),
+    rr: games.reduce((sum, m) => sum + matchDetails(m).rrNumber, 0),
     count: games.length,
   };
 }
@@ -712,7 +681,6 @@ async function onAdd(event) {
 
   const entry = await fetchAccountData(account);
   await mergeCache(accountId(account), entry);
-  await chrome.storage.local.set({ lastRefresh: Date.now() });
   await render();
 }
 
@@ -772,6 +740,14 @@ function normalizePinnedOrder(accounts) {
   });
 }
 
+function getPanelHostRect() {
+  const host = panelRoot?.host;
+  if (host && typeof host.getBoundingClientRect === "function") {
+    return host.getBoundingClientRect();
+  }
+  return { left: 0, top: 0 };
+}
+
 function preventNativeCardDrag(event) {
   if (event.target.closest(".card")) event.preventDefault();
 }
@@ -796,24 +772,27 @@ function onPinnedPointerDown(event) {
   placeholder.style.width = `${rect.width}px`;
   card.after(placeholder);
 
+  const hostRect = getPanelHostRect();
+
   pinnedPointerDrag = {
     id: card.dataset.id,
     card,
     placeholder,
     pointerId: event.pointerId,
     pointerOffsetY: event.clientY - rect.top,
-    pointerOffsetX: event.clientX - rect.left,
-    width: rect.width,
-    height: rect.height,
-    moved: false,
+    hostTop: hostRect.top,
+    lastPointerY: event.clientY,
+    dragDirection: "down",
   };
 
   // Move the real card, not a cloned ghost. The placeholder only keeps the list height stable.
+  // Because the panel host uses transform, fixed-position children are positioned relative to
+  // the host, not the viewport. Convert viewport coordinates to host-local coordinates.
   card.classList.add("dragging", "real-card-drag");
   card.style.width = `${rect.width}px`;
   card.style.height = `${rect.height}px`;
-  card.style.left = `${rect.left}px`;
-  card.style.top = `${rect.top}px`;
+  card.style.left = `${rect.left - hostRect.left}px`;
+  card.style.top = `${rect.top - hostRect.top}px`;
   card.setPointerCapture?.(event.pointerId);
 
   window.addEventListener("pointermove", onPinnedPointerMove, { passive: false });
@@ -825,23 +804,30 @@ function onPinnedPointerMove(event) {
   if (!pinnedPointerDrag) return;
   event.preventDefault();
 
-  const { card, pointerOffsetY, pointerOffsetX } = pinnedPointerDrag;
-  pinnedPointerDrag.moved = true;
-  card.style.left = `${event.clientX - pointerOffsetX}px`;
-  card.style.top = `${event.clientY - pointerOffsetY}px`;
+  const { card, pointerOffsetY, hostTop } = pinnedPointerDrag;
+  const previousY = pinnedPointerDrag.lastPointerY ?? event.clientY;
+  pinnedPointerDrag.dragDirection = event.clientY >= previousY ? "down" : "up";
+  pinnedPointerDrag.lastPointerY = event.clientY;
+  // Keep the card locked to the vertical axis. The left value is set once on
+  // pointer down, so dragging only moves the entry up and down.
+  card.style.top = `${event.clientY - pointerOffsetY - hostTop}px`;
 
   movePinnedPlaceholder(event.clientY);
 }
 
 function movePinnedPlaceholder(pointerY) {
-  const { placeholder } = pinnedPointerDrag;
+  const { placeholder, dragDirection } = pinnedPointerDrag;
   const movableCards = [...accountsEl.querySelectorAll(".card.pinned:not(.dragging):not(.drag-placeholder)")];
   const firstRects = new Map(movableCards.map((node) => [node, node.getBoundingClientRect()]));
 
   let insertBeforeNode = null;
   for (const target of movableCards) {
     const rect = target.getBoundingClientRect();
-    if (pointerY < rect.top + rect.height / 2) {
+    // Trigger the reorder a bit earlier than the exact midpoint.
+    // Downward drags swap after crossing the upper third; upward drags swap
+    // before crossing the lower third. This makes the list feel more responsive.
+    const thresholdRatio = dragDirection === "up" ? 0.65 : 0.35;
+    if (pointerY < rect.top + rect.height * thresholdRatio) {
       insertBeforeNode = target;
       break;
     }
@@ -929,21 +915,6 @@ async function savePinnedOrder(orderedPinnedIds) {
   await render();
 }
 
-async function movePinnedAccount(fromId, toId) {
-  const accounts = normalizePinnedOrder(await getAccounts());
-  const pinned = accounts
-    .filter((account) => account.pinned)
-    .sort((a, b) => pinOrderOf(a, 0) - pinOrderOf(b, 0));
-
-  const fromIndex = pinned.findIndex((account) => accountId(account) === fromId);
-  const toIndex = pinned.findIndex((account) => accountId(account) === toId);
-  if (fromIndex < 0 || toIndex < 0) return;
-
-  const [moved] = pinned.splice(fromIndex, 1);
-  pinned.splice(toIndex, 0, moved);
-  await savePinnedOrder(pinned.map((account) => accountId(account)));
-}
-
 async function refreshOnOpen() {
   const settings = await getSettings();
   if (settings.refreshMode !== "open") return;
@@ -975,7 +946,7 @@ async function refreshAll(options = {}) {
       cache[accountId(account)] = await fetchAccountData(account);
     }),
   );
-  await chrome.storage.local.set({ cache, lastRefresh: Date.now() });
+  await chrome.storage.local.set({ cache });
 
   refreshBtn.classList.remove("spinning");
   refreshBtn.disabled = false;

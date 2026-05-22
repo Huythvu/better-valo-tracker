@@ -799,13 +799,24 @@ strong.loss {
 
 .card.pinned {
   position: relative;
+  cursor: grab;
   background: linear-gradient(135deg, #243141, #1b2632);
   box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.08), 0 10px 24px rgba(0, 0, 0, 0.18);
+}
+
+.card.pinned:active {
+  cursor: grabbing;
 }
 
 .card.pinned .avatar-col {
   position: relative;
   align-self: stretch;
+}
+
+.card.pinned button,
+.card.pinned .pip,
+.card.pinned .pip-wrap {
+  cursor: auto;
 }
 
 .card.pinned.dragging {
@@ -836,43 +847,32 @@ strong.loss {
 
 .pin {
   flex: 0 0 auto;
+  width: 18px;
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  line-height: 1;
-  padding: 0;
-}
-
-.drag-handle {
-  flex: 0 0 auto;
-  color: var(--muted);
-  line-height: 1;
-  padding: 0;
-  pointer-events: none;
-  user-select: none;
-}
-
-.pin {
-  width: 18px;
   font-size: 15px;
+  line-height: 1;
+  padding: 0;
   transform-origin: center;
   transition: color 160ms ease, transform 160ms ease;
 }
 
-.pin:hover {
-  color: #ffd454;
-  transform: scale(1.08);
-}
-
+.pin:hover,
 .pin.active {
   color: #ffd454;
+}
+
+.pin:hover {
+  transform: scale(1.08);
 }
 
 .drag-handle {
   position: absolute;
   top: 50%;
   left: 50%;
+  flex: 0 0 auto;
   width: 22px;
   height: 16px;
   display: inline-flex;
@@ -880,23 +880,14 @@ strong.loss {
   align-items: center;
   justify-content: center;
   gap: 3px;
+  color: var(--muted);
+  line-height: 1;
   opacity: 0.68;
+  padding: 0;
+  pointer-events: none;
+  user-select: none;
   transform: translate(-50%, -50%);
   transition: opacity 140ms ease, transform 140ms ease;
-}
-
-.card.pinned {
-  cursor: grab;
-}
-
-.card.pinned:active {
-  cursor: grabbing;
-}
-
-.card.pinned button,
-.card.pinned .pip,
-.card.pinned .pip-wrap {
-  cursor: auto;
 }
 
 .drag-handle span {
@@ -915,8 +906,8 @@ strong.loss {
 }
 
 .compact .pin {
-  font-size: 14px;
   width: 16px;
+  font-size: 14px;
 }
 
 .compact .card.pinned .avatar-col {
@@ -937,16 +928,6 @@ strong.loss {
 
 .compact .drag-handle span {
   width: 12px;
-}
-
-
-
-
-/* --- Collapsible add form --- */
-
-
-.compact-popover-main {
-  grid-template-columns: 1fr 1fr;
 }
 
 .card img,

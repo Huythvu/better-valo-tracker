@@ -1,4 +1,4 @@
-// Shared Worker-API helpers, used by both popup.js and background.js.
+// Shared Worker-API helpers used by the injected panel.
 
 // Stable key for an account in the local cache.
 self.accountId = function accountId(account) {
