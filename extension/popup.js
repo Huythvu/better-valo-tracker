@@ -552,7 +552,7 @@ function matchDetails(match, lastChange) {
     agent: valueOrDash(readField(match, ["agent", "agent.name", "character", "characterName", "character.name", "player.agent", "player.agent.name", "player.character", "player.character.name"])),
     kda: kdaText(kills, deaths, assists),
     acs: valueOrDash(readField(match, ["acs", "averageCombatScore", "average_combat_score", "combatScore", "combat_score", "stats.acs", "stats.averageCombatScore", "stats.combatScore", "player.stats.acs", "player.stats.averageCombatScore"])),
-    hs: percentText(readField(match, ["hs", "hsPercent", "hs_percentage", "headshotPercent", "headshot_percentage", "headshot_percentage_display", "stats.hs", "stats.hsPercent", "stats.headshotPercent", "stats.headshot_percentage", "player.stats.headshotPercent"])),
+    hs: percentText(readField(match, ["hsPct", "hs_pct", "headshotPct", "headshot_pct", "hs", "hsPercent", "hs_percentage", "headshotPercent", "headshot_percentage", "headshot_percentage_display", "stats.hsPct", "stats.hs_pct", "stats.headshotPct", "stats.headshot_pct", "stats.hs", "stats.hsPercent", "stats.headshotPercent", "stats.headshot_percentage", "player.stats.hsPct", "player.stats.hs_pct", "player.stats.headshotPercent"])),
     tier: valueOrDash(readField(match, ["tier", "rank", "rankThen", "currentTierPatched", "tierPatched", "metadata.tier"])),
     when: date ? timeAgo(date) : "—",
   };

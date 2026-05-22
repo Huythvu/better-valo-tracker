@@ -464,7 +464,8 @@ h1::before {
   transform: translate(0, 4px) scale(0.98);
 }
 
-.pip-wrap:last-child .match-popover {
+.pip-wrap:last-child .match-popover,
+.pip-wrap:nth-child(4) .match-popover {
   left: auto;
   right: 0;
   transform: translate(0, 4px) scale(0.98);
@@ -481,7 +482,9 @@ h1::before {
 .pip-wrap:first-child:hover .match-popover,
 .pip-wrap:first-child:focus-within .match-popover,
 .pip-wrap:last-child:hover .match-popover,
-.pip-wrap:last-child:focus-within .match-popover {
+.pip-wrap:last-child:focus-within .match-popover,
+.pip-wrap:nth-child(4):hover .match-popover,
+.pip-wrap:nth-child(4):focus-within .match-popover {
   transform: translate(0, 0) scale(1);
 }
 
