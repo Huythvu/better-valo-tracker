@@ -788,15 +788,29 @@ function onPinnedPointerDown(event) {
   }
 
   event.preventDefault();
+
+  const rect = card.getBoundingClientRect();
+  const placeholder = document.createElement("div");
+  placeholder.className = "card pinned drag-placeholder";
+  placeholder.style.height = `${rect.height}px`;
+  placeholder.style.width = `${rect.width}px`;
+  card.after(placeholder);
+
   pinnedPointerDrag = {
     id: card.dataset.id,
     card,
+    placeholder,
     pointerId: event.pointerId,
-    startY: event.clientY,
+    pointerOffsetY: event.clientY - rect.top,
+    pointerOffsetX: event.clientX - rect.left,
     moved: false,
   };
 
-  card.classList.add("dragging", "pointer-dragging");
+  card.classList.add("dragging", "pointer-dragging", "floating-drag");
+  card.style.width = `${rect.width}px`;
+  card.style.height = `${rect.height}px`;
+  card.style.left = `${rect.left}px`;
+  card.style.top = `${rect.top}px`;
   card.setPointerCapture?.(event.pointerId);
 
   window.addEventListener("pointermove", onPinnedPointerMove, { passive: false });
@@ -808,28 +822,20 @@ function onPinnedPointerMove(event) {
   if (!pinnedPointerDrag) return;
   event.preventDefault();
 
-  const { card } = pinnedPointerDrag;
-  const dy = event.clientY - pinnedPointerDrag.startY;
-  if (Math.abs(dy) > 3) pinnedPointerDrag.moved = true;
+  const { card, pointerOffsetY } = pinnedPointerDrag;
+  pinnedPointerDrag.moved = true;
+  card.style.top = `${event.clientY - pointerOffsetY}px`;
 
-  const beforeOrder = [...accountsEl.querySelectorAll(".card.pinned")].map((node) => node.dataset.id).join("|");
-  movePinnedCardInDom(card, event.clientY);
-  const afterOrder = [...accountsEl.querySelectorAll(".card.pinned")].map((node) => node.dataset.id).join("|");
-
-  // Keep the dragged card feeling anchored to the pointer without showing the browser ghost image.
-  if (beforeOrder === afterOrder) {
-    card.style.setProperty("--drag-y", `${Math.max(-18, Math.min(18, dy))}px`);
-  } else {
-    pinnedPointerDrag.startY = event.clientY;
-    card.style.setProperty("--drag-y", "0px");
-  }
+  movePinnedPlaceholder(event.clientY);
 }
 
-function movePinnedCardInDom(card, pointerY) {
-  const otherPinnedCards = [...accountsEl.querySelectorAll(".card.pinned:not(.dragging)")];
-  let insertBeforeNode = null;
+function movePinnedPlaceholder(pointerY) {
+  const { placeholder } = pinnedPointerDrag;
+  const movableCards = [...accountsEl.querySelectorAll(".card.pinned:not(.dragging):not(.drag-placeholder)")];
+  const firstRects = new Map(movableCards.map((node) => [node, node.getBoundingClientRect()]));
 
-  for (const target of otherPinnedCards) {
+  let insertBeforeNode = null;
+  for (const target of movableCards) {
     const rect = target.getBoundingClientRect();
     if (pointerY < rect.top + rect.height / 2) {
       insertBeforeNode = target;
@@ -837,23 +843,52 @@ function movePinnedCardInDom(card, pointerY) {
     }
   }
 
-  if (insertBeforeNode) {
-    accountsEl.insertBefore(card, insertBeforeNode);
-    return;
+  if (!insertBeforeNode) {
+    insertBeforeNode = accountsEl.querySelector(".card:not(.pinned)");
   }
 
-  // Keep pinned cards inside the pinned group, before any unpinned cards.
-  const firstUnpinned = accountsEl.querySelector(".card:not(.pinned)");
-  accountsEl.insertBefore(card, firstUnpinned);
+  if (insertBeforeNode === placeholder || insertBeforeNode?.previousElementSibling === placeholder) return;
+  accountsEl.insertBefore(placeholder, insertBeforeNode);
+  animatePinnedReflow(firstRects, movableCards);
+}
+
+function animatePinnedReflow(firstRects, cards) {
+  for (const node of cards) {
+    const first = firstRects.get(node);
+    if (!first) continue;
+
+    const last = node.getBoundingClientRect();
+    const dx = first.left - last.left;
+    const dy = first.top - last.top;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+
+    node.style.transition = "none";
+    node.style.transform = `translate(${dx}px, ${dy}px)`;
+    node.getBoundingClientRect();
+
+    requestAnimationFrame(() => {
+      node.style.transition = "transform 180ms ease";
+      node.style.transform = "";
+      window.setTimeout(() => {
+        node.style.transition = "";
+      }, 190);
+    });
+  }
 }
 
 async function onPinnedPointerUp(event) {
   if (!pinnedPointerDrag) return;
   event.preventDefault();
 
-  const { card, pointerId } = pinnedPointerDrag;
+  const { card, placeholder, pointerId } = pinnedPointerDrag;
   card.releasePointerCapture?.(pointerId);
-  const orderedPinnedIds = [...accountsEl.querySelectorAll(".card.pinned")].map((node) => node.dataset.id);
+  accountsEl.insertBefore(card, placeholder);
+  placeholder.remove();
+
+  const orderedPinnedIds = [...accountsEl.querySelectorAll(".card.pinned:not(.drag-placeholder)")]
+    .map((node) => node.dataset.id)
+    .filter(Boolean);
+
   cleanupPinnedPointerDrag();
   await savePinnedOrder(orderedPinnedIds);
 }
@@ -861,14 +896,15 @@ async function onPinnedPointerUp(event) {
 function onPinnedPointerCancel(event) {
   if (!pinnedPointerDrag) return;
   pinnedPointerDrag.card.releasePointerCapture?.(pinnedPointerDrag.pointerId);
+  pinnedPointerDrag.placeholder?.remove();
   cleanupPinnedPointerDrag();
   render();
 }
 
 function cleanupPinnedPointerDrag() {
   if (pinnedPointerDrag?.card) {
-    pinnedPointerDrag.card.classList.remove("dragging", "pointer-dragging");
-    pinnedPointerDrag.card.style.removeProperty("--drag-y");
+    pinnedPointerDrag.card.classList.remove("dragging", "pointer-dragging", "floating-drag");
+    pinnedPointerDrag.card.removeAttribute("style");
   }
 
   pinnedPointerDrag = null;

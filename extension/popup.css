@@ -809,14 +809,28 @@ strong.loss {
 }
 
 .card.pinned.dragging {
-  opacity: 0.92;
-  z-index: 4;
-  transform: translateY(var(--drag-y, 0)) scale(1.01);
-  box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.18), 0 16px 34px rgba(0, 0, 0, 0.28);
+  opacity: 0.96;
+  z-index: 999999;
+  box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.18), 0 18px 40px rgba(0, 0, 0, 0.34);
 }
 
-.card.pinned.pointer-dragging {
-  transition: transform 90ms ease, box-shadow 120ms ease, background 180ms ease;
+.card.pinned.floating-drag {
+  position: fixed;
+  margin: 0;
+  pointer-events: none;
+  transform: scale(1.015);
+  transition: box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease;
+}
+
+.card.drag-placeholder {
+  border: 1px dashed rgba(255, 212, 84, 0.26);
+  background: rgba(255, 212, 84, 0.045);
+  box-shadow: none;
+  opacity: 1;
+}
+
+.card.drag-placeholder * {
+  visibility: hidden;
 }
 
 .pin {
