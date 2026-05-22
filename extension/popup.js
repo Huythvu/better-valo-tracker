@@ -796,9 +796,19 @@ function onPinnedPointerDown(event) {
   placeholder.style.width = `${rect.width}px`;
   card.after(placeholder);
 
+  const clone = card.cloneNode(true);
+  clone.classList.add("dragging", "pointer-dragging", "floating-drag", "drag-clone");
+  clone.removeAttribute("data-id");
+  clone.style.width = `${rect.width}px`;
+  clone.style.height = `${rect.height}px`;
+  clone.style.left = `${rect.left}px`;
+  clone.style.top = `${rect.top}px`;
+  panelRoot.appendChild(clone);
+
   pinnedPointerDrag = {
     id: card.dataset.id,
     card,
+    clone,
     placeholder,
     pointerId: event.pointerId,
     pointerOffsetY: event.clientY - rect.top,
@@ -806,11 +816,7 @@ function onPinnedPointerDown(event) {
     moved: false,
   };
 
-  card.classList.add("dragging", "pointer-dragging", "floating-drag");
-  card.style.width = `${rect.width}px`;
-  card.style.height = `${rect.height}px`;
-  card.style.left = `${rect.left}px`;
-  card.style.top = `${rect.top}px`;
+  card.classList.add("dragging", "drag-source-hidden");
   card.setPointerCapture?.(event.pointerId);
 
   window.addEventListener("pointermove", onPinnedPointerMove, { passive: false });
@@ -822,9 +828,9 @@ function onPinnedPointerMove(event) {
   if (!pinnedPointerDrag) return;
   event.preventDefault();
 
-  const { card, pointerOffsetY } = pinnedPointerDrag;
+  const { clone, pointerOffsetY } = pinnedPointerDrag;
   pinnedPointerDrag.moved = true;
-  card.style.top = `${event.clientY - pointerOffsetY}px`;
+  clone.style.top = `${event.clientY - pointerOffsetY}px`;
 
   movePinnedPlaceholder(event.clientY);
 }
@@ -902,8 +908,12 @@ function onPinnedPointerCancel(event) {
 }
 
 function cleanupPinnedPointerDrag() {
+  if (pinnedPointerDrag?.clone) {
+    pinnedPointerDrag.clone.remove();
+  }
+
   if (pinnedPointerDrag?.card) {
-    pinnedPointerDrag.card.classList.remove("dragging", "pointer-dragging", "floating-drag");
+    pinnedPointerDrag.card.classList.remove("dragging", "drag-source-hidden");
     pinnedPointerDrag.card.removeAttribute("style");
   }
 
