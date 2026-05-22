@@ -5,7 +5,7 @@ const DEFAULT_SETTINGS = {
   refreshMode: "open",
   showLastPlayed: true,
   compactMode: false,
-  hideAddFormWhenAccountsExist: true,
+  hideAddForm: false,
 };
 
 const REFRESH_COOLDOWN_MS = 30 * 1000;
@@ -63,7 +63,7 @@ const PANEL_HTML = `
     </label>
 
     <label class="setting checkbox-setting">
-      <span>Hide add player form when accounts exist</span>
+      <span>Hide add player form</span>
       <input id="hide-add-form" type="checkbox" />
     </label>
 
@@ -208,7 +208,7 @@ async function loadSettings() {
   refreshModeSelect.value = settings.refreshMode;
   showLastPlayedInput.checked = Boolean(settings.showLastPlayed);
   compactModeInput.checked = Boolean(settings.compactMode);
-  hideAddFormInput.checked = Boolean(settings.hideAddFormWhenAccountsExist);
+  hideAddFormInput.checked = Boolean(settings.hideAddForm);
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", Boolean(settings.compactMode));
   return settings;
 }
@@ -219,17 +219,16 @@ async function saveSettings() {
     refreshMode: refreshModeSelect.value,
     showLastPlayed: showLastPlayedInput.checked,
     compactMode: compactModeInput.checked,
-    hideAddFormWhenAccountsExist: hideAddFormInput.checked,
+    hideAddForm: hideAddFormInput.checked,
   };
   await chrome.storage.sync.set({ settings });
   panelRoot.querySelector(".bvt-panel").classList.toggle("compact", settings.compactMode);
   await render();
 }
 
-function updateAddFormVisibility(accounts, settings) {
-  // This setting hides the original add-account form after at least one account exists.
-  // No secondary add form/button is created; users can show the original form again in Settings.
-  addForm.hidden = Boolean(settings.hideAddFormWhenAccountsExist) && accounts.length > 0;
+function updateAddFormVisibility(_accounts, settings) {
+  // Simple manual show/hide toggle for the original add-account form.
+  addForm.hidden = Boolean(settings.hideAddForm);
 }
 
 // --- Storage ----------------------------------------------------------------
