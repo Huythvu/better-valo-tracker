@@ -205,6 +205,10 @@ h1::before {
   margin-bottom: 10px;
 }
 
+#add-form[hidden] {
+  display: none !important;
+}
+
 #riot-id {
   flex: 1;
   min-width: 0;
