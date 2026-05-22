@@ -809,13 +809,14 @@ strong.loss {
 }
 
 .card.pinned.dragging {
-  opacity: 0.55;
+  opacity: 0.92;
+  z-index: 4;
+  transform: translateY(var(--drag-y, 0)) scale(1.01);
+  box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.18), 0 16px 34px rgba(0, 0, 0, 0.28);
 }
 
-.card.pinned.drop-target {
-  outline: 1px dashed rgba(255, 212, 84, 0.75);
-  outline-offset: 2px;
-  transform: translateY(1px);
+.card.pinned.pointer-dragging {
+  transition: transform 90ms ease, box-shadow 120ms ease, background 180ms ease;
 }
 
 .pin {
@@ -931,4 +932,11 @@ strong.loss {
 
 .compact-popover-main {
   grid-template-columns: 1fr 1fr;
+}
+
+.card img,
+.card .avatar,
+.card .rank-icon {
+  -webkit-user-drag: none;
+  user-select: none;
 }

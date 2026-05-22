@@ -91,7 +91,7 @@ let panelRoot = null;
 let rankAssets = {};
 let isRefreshing = false;
 let lastManualRefreshAt = 0;
-let draggedPinnedId = null;
+let pinnedPointerDrag = null;
 
 let accountsEl;
 let emptyEl;
@@ -147,11 +147,8 @@ async function init() {
   addForm.addEventListener("submit", onAdd);
   refreshBtn.addEventListener("click", () => refreshAll({ manual: true }));
   accountsEl.addEventListener("click", onAccountsClick);
-  accountsEl.addEventListener("dragstart", onPinnedDragStart);
-  accountsEl.addEventListener("dragover", onPinnedDragOver);
-  accountsEl.addEventListener("dragleave", onPinnedDragLeave);
-  accountsEl.addEventListener("drop", onPinnedDrop);
-  accountsEl.addEventListener("dragend", onPinnedDragEnd);
+  accountsEl.addEventListener("pointerdown", onPinnedPointerDown);
+  accountsEl.addEventListener("dragstart", preventNativeCardDrag);
   closeBtn.addEventListener("click", () => self.bvtClosePanel());
   tabButtons.forEach((tab) => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
@@ -466,8 +463,7 @@ function shell(account, posBadge, accent, avatar, inner) {
   const dragHandle = pinned
     ? `<span class="drag-handle" aria-hidden="true"><span></span><span></span><span></span></span>`
     : "";
-  const draggable = pinned ? ` draggable="true"` : "";
-  return `<div class="${classes}" data-id="${esc(id)}"${draggable} style="border-left-color:${accent}">` +
+  return `<div class="${classes}" data-id="${esc(id)}" style="border-left-color:${accent}">` +
     `${posBadge}<div class="avatar-col">${avatar}${dragHandle}</div><div class="card-main">${inner}</div></div>`;
 }
 
@@ -776,49 +772,121 @@ function normalizePinnedOrder(accounts) {
   });
 }
 
-function onPinnedDragStart(event) {
+function preventNativeCardDrag(event) {
+  if (event.target.closest(".card")) event.preventDefault();
+}
+
+function onPinnedPointerDown(event) {
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+
   const card = event.target.closest(".card.pinned");
   if (!card) return;
 
-  // The whole pinned card is draggable, but normal controls should not start a drag.
+  // The whole pinned card can move, but controls and match hover targets should stay usable.
   if (event.target.closest("button, input, select, textarea, a, .pip, .pip-wrap, .match-popover")) {
-    event.preventDefault();
     return;
   }
 
-  draggedPinnedId = card.dataset.id;
-  card.classList.add("dragging");
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", draggedPinnedId);
-}
-
-function onPinnedDragOver(event) {
-  const card = event.target.closest(".card.pinned");
-  if (!card || !draggedPinnedId || card.dataset.id === draggedPinnedId) return;
-
   event.preventDefault();
-  event.dataTransfer.dropEffect = "move";
-  card.classList.add("drop-target");
+  pinnedPointerDrag = {
+    id: card.dataset.id,
+    card,
+    pointerId: event.pointerId,
+    startY: event.clientY,
+    moved: false,
+  };
+
+  card.classList.add("dragging", "pointer-dragging");
+  card.setPointerCapture?.(event.pointerId);
+
+  window.addEventListener("pointermove", onPinnedPointerMove, { passive: false });
+  window.addEventListener("pointerup", onPinnedPointerUp, { passive: false });
+  window.addEventListener("pointercancel", onPinnedPointerCancel, { passive: false });
 }
 
-function onPinnedDragLeave(event) {
-  const card = event.target.closest(".card.pinned");
-  if (card) card.classList.remove("drop-target");
-}
-
-async function onPinnedDrop(event) {
-  const targetCard = event.target.closest(".card.pinned");
-  if (!targetCard || !draggedPinnedId || targetCard.dataset.id === draggedPinnedId) return;
-
+function onPinnedPointerMove(event) {
+  if (!pinnedPointerDrag) return;
   event.preventDefault();
-  await movePinnedAccount(draggedPinnedId, targetCard.dataset.id);
+
+  const { card } = pinnedPointerDrag;
+  const dy = event.clientY - pinnedPointerDrag.startY;
+  if (Math.abs(dy) > 3) pinnedPointerDrag.moved = true;
+
+  const beforeOrder = [...accountsEl.querySelectorAll(".card.pinned")].map((node) => node.dataset.id).join("|");
+  movePinnedCardInDom(card, event.clientY);
+  const afterOrder = [...accountsEl.querySelectorAll(".card.pinned")].map((node) => node.dataset.id).join("|");
+
+  // Keep the dragged card feeling anchored to the pointer without showing the browser ghost image.
+  if (beforeOrder === afterOrder) {
+    card.style.setProperty("--drag-y", `${Math.max(-18, Math.min(18, dy))}px`);
+  } else {
+    pinnedPointerDrag.startY = event.clientY;
+    card.style.setProperty("--drag-y", "0px");
+  }
 }
 
-function onPinnedDragEnd() {
-  draggedPinnedId = null;
-  accountsEl.querySelectorAll(".card.dragging, .card.drop-target").forEach((card) => {
-    card.classList.remove("dragging", "drop-target");
+function movePinnedCardInDom(card, pointerY) {
+  const otherPinnedCards = [...accountsEl.querySelectorAll(".card.pinned:not(.dragging)")];
+  let insertBeforeNode = null;
+
+  for (const target of otherPinnedCards) {
+    const rect = target.getBoundingClientRect();
+    if (pointerY < rect.top + rect.height / 2) {
+      insertBeforeNode = target;
+      break;
+    }
+  }
+
+  if (insertBeforeNode) {
+    accountsEl.insertBefore(card, insertBeforeNode);
+    return;
+  }
+
+  // Keep pinned cards inside the pinned group, before any unpinned cards.
+  const firstUnpinned = accountsEl.querySelector(".card:not(.pinned)");
+  accountsEl.insertBefore(card, firstUnpinned);
+}
+
+async function onPinnedPointerUp(event) {
+  if (!pinnedPointerDrag) return;
+  event.preventDefault();
+
+  const { card, pointerId } = pinnedPointerDrag;
+  card.releasePointerCapture?.(pointerId);
+  const orderedPinnedIds = [...accountsEl.querySelectorAll(".card.pinned")].map((node) => node.dataset.id);
+  cleanupPinnedPointerDrag();
+  await savePinnedOrder(orderedPinnedIds);
+}
+
+function onPinnedPointerCancel(event) {
+  if (!pinnedPointerDrag) return;
+  pinnedPointerDrag.card.releasePointerCapture?.(pinnedPointerDrag.pointerId);
+  cleanupPinnedPointerDrag();
+  render();
+}
+
+function cleanupPinnedPointerDrag() {
+  if (pinnedPointerDrag?.card) {
+    pinnedPointerDrag.card.classList.remove("dragging", "pointer-dragging");
+    pinnedPointerDrag.card.style.removeProperty("--drag-y");
+  }
+
+  pinnedPointerDrag = null;
+  window.removeEventListener("pointermove", onPinnedPointerMove);
+  window.removeEventListener("pointerup", onPinnedPointerUp);
+  window.removeEventListener("pointercancel", onPinnedPointerCancel);
+}
+
+async function savePinnedOrder(orderedPinnedIds) {
+  const accounts = normalizePinnedOrder(await getAccounts());
+  const newOrders = new Map(orderedPinnedIds.map((id, index) => [id, index]));
+  const nextAccounts = accounts.map((account) => {
+    if (!account.pinned) return account;
+    return { ...account, pinOrder: newOrders.get(accountId(account)) ?? pinOrderOf(account, 0) };
   });
+
+  await setAccounts(nextAccounts);
+  await render();
 }
 
 async function movePinnedAccount(fromId, toId) {
@@ -833,15 +901,7 @@ async function movePinnedAccount(fromId, toId) {
 
   const [moved] = pinned.splice(fromIndex, 1);
   pinned.splice(toIndex, 0, moved);
-
-  const newOrders = new Map(pinned.map((account, index) => [accountId(account), index]));
-  const nextAccounts = accounts.map((account) => {
-    if (!account.pinned) return account;
-    return { ...account, pinOrder: newOrders.get(accountId(account)) ?? 0 };
-  });
-
-  await setAccounts(nextAccounts);
-  await render();
+  await savePinnedOrder(pinned.map((account) => accountId(account)));
 }
 
 async function refreshOnOpen() {
