@@ -38,7 +38,6 @@ const PANEL_HTML = `
       </select>
       <button type="submit">Add</button>
     </form>
-    <button id="show-add-form" class="show-add-form" type="button" hidden>+ Add player</button>
     <p id="status" class="status" hidden></p>
     <div id="accounts"></div>
     <p id="empty" class="empty">No accounts tracked yet. Add a Riot ID above.</p>
@@ -101,7 +100,6 @@ let refreshModeSelect;
 let showLastPlayedInput;
 let compactModeInput;
 let hideAddFormInput;
-let showAddFormBtn;
 let tabButtons;
 let panelEl;
 
@@ -123,7 +121,6 @@ self.bvtMountPanel = function bvtMountPanel(root) {
   showLastPlayedInput = root.getElementById("show-last-played");
   compactModeInput = root.getElementById("compact-mode");
   hideAddFormInput = root.getElementById("hide-add-form");
-  showAddFormBtn = root.getElementById("show-add-form");
   tabButtons = root.querySelectorAll(".tab");
   panelEl = root.querySelector(".bvt-panel");
 
@@ -140,7 +137,6 @@ async function init() {
   await render();
 
   addForm.addEventListener("submit", onAdd);
-  showAddFormBtn.addEventListener("click", revealAddForm);
   refreshBtn.addEventListener("click", () => refreshAll({ manual: true }));
   accountsEl.addEventListener("click", onAccountsClick);
   accountsEl.addEventListener("dragstart", onPinnedDragStart);
@@ -231,18 +227,9 @@ async function saveSettings() {
 }
 
 function updateAddFormVisibility(accounts, settings) {
-  const shouldHide = Boolean(settings.hideAddFormWhenAccountsExist) && accounts.length > 0;
-  const isExpanded = addForm.dataset.expanded === "true";
-
-  addForm.hidden = shouldHide && !isExpanded;
-  showAddFormBtn.hidden = !shouldHide || isExpanded;
-}
-
-function revealAddForm() {
-  addForm.dataset.expanded = "true";
-  addForm.hidden = false;
-  showAddFormBtn.hidden = true;
-  riotIdInput.focus();
+  // This setting hides the original add-account form after at least one account exists.
+  // No secondary add form/button is created; users can show the original form again in Settings.
+  addForm.hidden = Boolean(settings.hideAddFormWhenAccountsExist) && accounts.length > 0;
 }
 
 // --- Storage ----------------------------------------------------------------
@@ -715,7 +702,6 @@ async function onAdd(event) {
   accounts.push(account);
   await setAccounts(accounts);
   riotIdInput.value = "";
-  addForm.dataset.expanded = "";
   await render();
 
   const entry = await fetchAccountData(account);
