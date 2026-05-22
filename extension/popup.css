@@ -814,25 +814,13 @@ strong.loss {
   box-shadow: 0 0 0 1px rgba(255, 212, 84, 0.18), 0 18px 40px rgba(0, 0, 0, 0.34);
 }
 
-.card.pinned.floating-drag {
+.card.pinned.real-card-drag {
   position: fixed;
   margin: 0;
   pointer-events: none;
   transform: scale(1.015);
   transition: box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease;
-}
-
-.card.pinned.drag-source-hidden {
-  display: none;
-}
-
-.card.pinned.drag-clone {
   z-index: 2147483647;
-  visibility: visible;
-}
-
-.card.pinned.drag-clone * {
-  visibility: visible;
 }
 
 .card.drag-placeholder {

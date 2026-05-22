@@ -796,27 +796,24 @@ function onPinnedPointerDown(event) {
   placeholder.style.width = `${rect.width}px`;
   card.after(placeholder);
 
-  const clone = card.cloneNode(true);
-  clone.classList.add("dragging", "pointer-dragging", "floating-drag", "drag-clone");
-  clone.removeAttribute("data-id");
-  clone.style.width = `${rect.width}px`;
-  clone.style.height = `${rect.height}px`;
-  clone.style.left = `${rect.left}px`;
-  clone.style.top = `${rect.top}px`;
-  panelRoot.appendChild(clone);
-
   pinnedPointerDrag = {
     id: card.dataset.id,
     card,
-    clone,
     placeholder,
     pointerId: event.pointerId,
     pointerOffsetY: event.clientY - rect.top,
     pointerOffsetX: event.clientX - rect.left,
+    width: rect.width,
+    height: rect.height,
     moved: false,
   };
 
-  card.classList.add("dragging", "drag-source-hidden");
+  // Move the real card, not a cloned ghost. The placeholder only keeps the list height stable.
+  card.classList.add("dragging", "real-card-drag");
+  card.style.width = `${rect.width}px`;
+  card.style.height = `${rect.height}px`;
+  card.style.left = `${rect.left}px`;
+  card.style.top = `${rect.top}px`;
   card.setPointerCapture?.(event.pointerId);
 
   window.addEventListener("pointermove", onPinnedPointerMove, { passive: false });
@@ -828,9 +825,10 @@ function onPinnedPointerMove(event) {
   if (!pinnedPointerDrag) return;
   event.preventDefault();
 
-  const { clone, pointerOffsetY } = pinnedPointerDrag;
+  const { card, pointerOffsetY, pointerOffsetX } = pinnedPointerDrag;
   pinnedPointerDrag.moved = true;
-  clone.style.top = `${event.clientY - pointerOffsetY}px`;
+  card.style.left = `${event.clientX - pointerOffsetX}px`;
+  card.style.top = `${event.clientY - pointerOffsetY}px`;
 
   movePinnedPlaceholder(event.clientY);
 }
@@ -908,12 +906,8 @@ function onPinnedPointerCancel(event) {
 }
 
 function cleanupPinnedPointerDrag() {
-  if (pinnedPointerDrag?.clone) {
-    pinnedPointerDrag.clone.remove();
-  }
-
   if (pinnedPointerDrag?.card) {
-    pinnedPointerDrag.card.classList.remove("dragging", "drag-source-hidden");
+    pinnedPointerDrag.card.classList.remove("dragging", "real-card-drag");
     pinnedPointerDrag.card.removeAttribute("style");
   }
 
